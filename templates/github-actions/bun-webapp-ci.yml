@@ -1,0 +1,38 @@
+name: Web application CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history lets the changed-files gate compare the pull request with its base.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest # Pin this in repositories that require exact reproducibility.
+      - run: bun install --frozen-lockfile
+
+      # Adapt script names to the target repository's package.json when necessary.
+      - name: Typecheck (blocking)
+        run: bun run typecheck
+      - name: Unit and integration tests (blocking)
+        run: bun run test
+      - name: Full lint (advisory legacy baseline)
+        continue-on-error: true
+        run: bun run lint
+      - name: Changed-files lint (blocking on pull requests)
+        if: github.event_name == 'pull_request'
+        env:
+          LINT_CHANGED_BASE: ${{ github.event.pull_request.base.sha }}
+        run: bun run lint:changed
+      - name: Production build (blocking)
+        run: bun run build
