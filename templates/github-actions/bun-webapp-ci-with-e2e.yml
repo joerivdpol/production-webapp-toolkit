@@ -1,0 +1,57 @@
+name: Web application CI with E2E
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest # ADAPT: pin the repository's supported Bun version.
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run test
+      - if: github.event_name == 'pull_request'
+        env:
+          LINT_CHANGED_BASE: ${{ github.event.pull_request.base.sha }}
+        run: bun run lint:changed
+      - run: bun run build
+
+  e2e:
+    needs: quality
+    runs-on: ubuntu-latest
+    # No production/provider secrets belong in this job. The Playwright webServer
+    # starts the isolated local application and fails if it cannot become ready.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest # ADAPT: pin consistently with the quality job.
+      - run: bun install --frozen-lockfile
+      - name: Install Chromium and its OS dependencies
+        run: bunx playwright install --with-deps chromium
+      - name: Run blocking Chromium E2E
+        env:
+          CI: true
+          E2E_BASE_URL: http://127.0.0.1:4173 # ADAPT: must match playwright.config.ts.
+        run: bun run test:e2e --project=chromium
+      - name: Upload Playwright diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
