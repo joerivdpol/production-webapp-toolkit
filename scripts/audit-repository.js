@@ -71,6 +71,7 @@ export function inspectRepository(target) {
     ["ci-build", "Production build in CI", scriptRunsInCi(workflows, "build")],
     ["playwright", "Playwright configuration", hasAny(root, ["playwright.config.ts", "playwright.config.js", "playwright.config.mjs"])],
     ["e2e-script", "E2E script", typeof scripts.e2e === "string" || typeof scripts["test:e2e"] === "string"],
+    ["ci-e2e", "E2E tests invoked in CI", scriptRunsInCi(workflows, "e2e") || scriptRunsInCi(workflows, "test:e2e")],
   ];
   const checks = definitions.map(([id, label, passed]) => ({ id, label, passed: Boolean(passed), required: REQUIRED_IDS.has(id) }));
 
@@ -96,7 +97,7 @@ export function formatScorecard(report) {
     report.corePassed
       ? "Result: PASS — all required core quality gates are present."
       : "Result: FAIL — one or more required core quality gates are missing.",
-    "Required checks establish the install, TypeScript, script, changed-lint, and CI gate baseline; documentation and E2E readiness are optional.",
+    "Required checks establish the install, TypeScript, script, changed-lint, and CI gate baseline; documentation and the three E2E readiness checks are optional.",
   ];
   return lines.join("\n");
 }

@@ -27,7 +27,13 @@ The audit is also directly executable:
 node scripts/audit-repository.js /path/to/repository
 ```
 
-It prints a human-readable scorecard and never modifies the target. Required checks cover the core install, TypeScript, scripts, changed-lint, and CI baseline; agent documentation and E2E readiness are optional. The process exits non-zero when a required core check is absent.
+It prints a human-readable scorecard and never modifies the target. The score has 18 checks: 13 required core checks plus five optional documentation/E2E indicators. E2E readiness consists of a Playwright config, an E2E package script, and CI invocation; it does not affect the 13/13 core result. The process exits non-zero only when a required core check is absent.
+
+## Optional Playwright foundation
+
+After a repository reaches the 13/13 core standard, copy and adapt [`templates/playwright/`](templates/playwright/) and the separate E2E job in [`templates/github-actions/bun-webapp-ci-with-e2e.yml`](templates/github-actions/bun-webapp-ci-with-e2e.yml). The template is Chromium-first, starts its own local server, captures retry/failure diagnostics, and validates the target before any browser starts.
+
+Adopting repositories should pin `@playwright/test` and expose `test:e2e`, `test:e2e:ui`, and `test:e2e:install`. Browser installation is explicit rather than a postinstall side effect. The default foundation accepts only loopback and reserved `.test`/`.localhost` origins; it needs no production credentials or provider access.
 
 ## AI-agent workflow
 
@@ -39,6 +45,7 @@ It prints a human-readable scorecard and never modifies the target. Required che
 scripts/                         changed-files lint and repository audit CLIs
 test/                            deterministic parser and audit fixture tests
 templates/github-actions/        reusable Bun web application CI example
+templates/playwright/             fail-closed Playwright config, helper, and smoke suite
 templates/AGENTS.md              generic agent guardrails
 templates/development.md         generic contributor workflow
 docs/                            standard, rollout, and agent architecture
@@ -52,7 +59,7 @@ See [`docs/standard.md`](docs/standard.md) for the architecture and required/opt
 - Test the changed-files engine against a broader Git compatibility matrix.
 - Add machine-readable audit output without changing the human scorecard.
 - Provide version-pinned CI template variants.
-- Add optional Playwright/E2E foundations with isolated example fixtures.
+- Add machine-readable detail for E2E readiness levels.
 - Document branch-protection verification, which cannot be inferred from repository files alone.
 
 ## License
