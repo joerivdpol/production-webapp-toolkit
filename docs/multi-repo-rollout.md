@@ -15,6 +15,14 @@ Recommended sequence:
 
 Central consistency should not erase legitimate repository differences. Keep shared policy small, version changes deliberately, and validate templates in a representative repository before broad rollout. Never distribute secrets or production configuration through templates.
 
+## Auditing the rollout
+
+Use `bun run audit /path/to/repository` for a working-tree inspection. Use `bun run audit:all --projects-root /path/to/projects` for the coordinated view of the configured repositories at their latest fetched `origin/main`. The multi-repository command fetches without switching branches, creates a detached temporary worktree for the resolved commit, runs the same 18-check engine, and always attempts cleanup. It does not run checkout, reset, stash, clean, rebase, or pull in an application's active worktree, so dirty feature branches remain untouched.
+
+The full score is 18 per repository. The required core score is 13; the other five checks cover agent/development documentation and three E2E-readiness signals. Consequently, optional readiness can produce (for example) 15/18 with core 13/13 and a passing result. The aggregate exits successfully only when every selected repository completed without operational errors and passed all core gates.
+
+For automation, append `--json`. For an offline snapshot, append `--no-fetch`; this deliberately trusts the existing local `origin/main`. Repeat `--repo` or use comma-separated names to audit a subset. A useful workflow is to record a JSON baseline before multi-repository changes, then run the fetched audit again after each repository has merged and pushed its work.
+
 For each application, adapt the start command, port, base URL, readiness/health route, and stable accessible selectors. Add pinned `@playwright/test` plus these conventional scripts:
 
 ```json

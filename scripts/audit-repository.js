@@ -103,10 +103,12 @@ export function formatScorecard(report) {
 }
 
 export function main(argv = process.argv.slice(2)) {
-  const target = argv[0] ?? process.cwd();
+  const json = argv.includes("--json");
+  const positional = argv.filter((argument) => argument !== "--json");
+  const target = positional[0] ?? process.cwd();
   const report = inspectRepository(target);
-  console.log(formatScorecard(report));
+  console.log(json ? JSON.stringify(report) : formatScorecard(report));
   return report.corePassed ? 0 : 1;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) process.exitCode = main();
+if (import.meta.url === pathToFileURL(resolve(process.argv[1] ?? "")).href) process.exitCode = main();

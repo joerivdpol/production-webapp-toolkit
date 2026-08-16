@@ -10,7 +10,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "audit": "node scripts/audit-repository.js .",
+    "audit": "node scripts/audit-repository.js",
+    "audit:all": "node scripts/audit-all-repositories.js",
     "build": "tsc --noEmit",
     "check": "bun run typecheck && bun run test && bun run lint",
     "lint": "eslint .",
