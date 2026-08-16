@@ -59,7 +59,7 @@ async function repository(projectsRoot, name, options = {}) {
   const remote = join(projectsRoot, `${name}-origin.git`);
   const seed = join(projectsRoot, `${name}-seed`);
   const active = join(projectsRoot, name);
-  git(projectsRoot, "init", "--bare", remote);
+  git(projectsRoot, "init", "--bare", "--initial-branch=main", remote);
   mkdirSync(seed);
   git(seed, "init", "-b", "main");
   git(seed, "config", "user.email", "audit@example.test");
@@ -174,6 +174,7 @@ describe("multi-repository audit", () => {
     const root = await directory();
     const active = await repository(root, "one");
     git(active, "switch", "-c", "feature/active-work");
+    write(active, "AGENTS.md", "local tracked change\n");
     write(active, "local-uncommitted.txt", "keep me\n");
     const beforeBranch = git(active, "branch", "--show-current");
     const beforeStatus = git(active, "status", "--short");
