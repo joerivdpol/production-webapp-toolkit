@@ -68,7 +68,18 @@ export function planRemediation(target) {
     }
   }
 
-  return { report, items };
+  const safeCount = items.filter((item) => item.remediation === "safe").length;
+  const manualCount = items.filter((item) => item.remediation === "manual").length;
+
+  return {
+    report,
+    items,
+    summary: {
+      total: items.length,
+      safe: safeCount,
+      manual: manualCount,
+    },
+  };
 }
 
 /** @param {ReturnType<typeof planRemediation>} plan */
@@ -91,8 +102,18 @@ export function formatRemediationPlan(plan) {
 }
 
 export function main(argv = process.argv.slice(2)) {
-  const target = argv[0] ?? process.cwd();
-  console.log(formatRemediationPlan(planRemediation(resolve(target))));
+  const json = argv.includes("--json");
+  const positional = argv.filter((argument) => argument !== "--json");
+  const target = positional[0] ?? process.cwd();
+
+  const plan = planRemediation(resolve(target));
+
+  console.log(
+    json
+      ? JSON.stringify(plan)
+      : formatRemediationPlan(plan),
+  );
+
   return 0;
 }
 

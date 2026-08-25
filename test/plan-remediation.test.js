@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 
 import {
   planRemediation,
@@ -119,10 +120,53 @@ test("formats a clean repository as requiring no remediation", () => {
       corePassed: true,
     },
     items: [],
+    summary: {
+      total: 0,
+      safe: 0,
+      manual: 0,
+    },
   };
 
   assert.equal(
     formatRemediationPlan(plan),
     "Remediation plan: /tmp/example\n\nNo required remediation needed.",
+  );
+});
+
+test("CLI produces machine-readable JSON output", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "remediation-json-"));
+
+  fs.writeFileSync(
+    path.join(root, "package.json"),
+    JSON.stringify({
+      name: "remediation-json-test",
+      packageManager: "bun@1.3.14",
+    }),
+  );
+
+  fs.writeFileSync(path.join(root, "tsconfig.json"), "{}\n");
+
+  const output = execFileSync(
+    "node",
+    [
+      path.resolve("scripts/plan-remediation.js"),
+      root,
+      "--json",
+    ],
+    { encoding: "utf8" },
+  );
+
+  /** @type {ReturnType<typeof planRemediation>} */
+  const parsed = JSON.parse(output);
+
+  assert.equal(parsed.report.root, root);
+  assert.equal(parsed.summary.total, parsed.items.length);
+  assert.equal(
+    parsed.summary.safe,
+    parsed.items.filter((item) => item.remediation === "safe").length,
+  );
+  assert.equal(
+    parsed.summary.manual,
+    parsed.items.filter((item) => item.remediation === "manual").length,
   );
 });
