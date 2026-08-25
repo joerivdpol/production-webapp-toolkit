@@ -19,6 +19,9 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
+
+      - name: Public repository safety
+        run: node scripts/audit-public-repo-safety.js .
       - run: bun run typecheck
       - run: bun run test
       - run: bun run lint
