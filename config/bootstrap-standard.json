@@ -1,0 +1,15 @@
+{
+  "files": [
+    {
+      "template": "AGENTS.md",
+      "destination": "AGENTS.md"
+    },
+    {
+      "template": "development.md",
+      "destination": "docs/development.md"
+    }
+  ],
+  "github": {
+    "workflow": "bun-webapp-ci-with-e2e.yml"
+  }
+}
