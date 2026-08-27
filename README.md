@@ -82,3 +82,27 @@ See [`docs/standard.md`](docs/standard.md) for the architecture and required/opt
 ## License
 
 MIT
+
+## v1 capability surface
+
+Production Webapp Toolkit v1 supports repository profiles and profiled auditing for TypeScript webapps and Python services.
+
+It provides dependency drift auditing across repositories, including version differences and reproducibility gaps.
+
+It provides public repository safety checks for tracked sensitive files and secret-like content. The toolkit runs this check as a blocking CI gate and does not print detected secret values.
+
+It provides architecture compliance through external versioned policy files. Organization-specific policy remains outside this public toolkit.
+
+The toolkit also provides safe repository bootstrap, remediation planning and execution, ecosystem auditing, and self-contained v1 release-readiness validation.
+
+Useful commands:
+
+- bun run audit:profiled /path/to/repository
+- bun run audit:ecosystem /path/to/repository-one /path/to/repository-two
+- bun run audit:drift /path/to/app-one /path/to/app-two
+- bun run audit:safety .
+- bun run audit:architecture --policy /private/path/policy.json
+- bun run bootstrap /path/to/repository --dry-run
+- bun run remediation:plan /path/to/repository
+- bun run remediation:apply /path/to/repository --dry-run
+- bun run audit:release .
