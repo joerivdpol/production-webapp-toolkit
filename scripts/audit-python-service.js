@@ -163,10 +163,32 @@ export function formatPythonServiceAudit(report) {
 }
 
 export function main(argv = process.argv.slice(2)) {
-  const target = argv[0] ?? process.cwd();
+  const json = argv.includes("--json");
+  const positional = argv.filter((argument) => argument !== "--json");
+  const target = resolve(positional[0] ?? process.cwd());
+
+  if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) {
+    const error = {
+      error: "target_not_found",
+      target,
+    };
+
+    console.error(
+      json
+        ? JSON.stringify(error)
+        : `Python service audit failed: target does not exist: ${target}`,
+    );
+
+    return 1;
+  }
+
   const report = inspectPythonService(target);
 
-  console.log(formatPythonServiceAudit(report));
+  console.log(
+    json
+      ? JSON.stringify(report)
+      : formatPythonServiceAudit(report),
+  );
 
   return report.corePassed ? 0 : 1;
 }
