@@ -1,6 +1,6 @@
 {
   "name": "production-webapp-toolkit",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Reusable CI quality gates, repository auditing, and AI-agent workflow templates for TypeScript web applications.",
   "type": "module",
