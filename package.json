@@ -19,6 +19,7 @@
     "audit:safety": "node scripts/audit-public-repo-safety.js",
     "audit:architecture": "node scripts/audit-architecture-compliance.js",
     "audit:git-governance": "node scripts/audit-git-governance.js",
+    "audit:production-baseline": "node scripts/audit-production-baseline.js",
     "audit:release": "node scripts/audit-release-readiness.js",
     "bootstrap": "node scripts/bootstrap-repository.js",
     "remediation:plan": "node scripts/plan-remediation.js",
