@@ -20,6 +20,7 @@ bun run check
 bun run audit /path/to/repository
 bun run audit:git-governance /path/to/repository
 bun run audit:production-baseline /path/to/repository --expected-ref origin/production/example --compare-ref HEAD
+bun run audit:repository-status /path/to/repository --expected-ref origin/production/example --compare-ref HEAD
 bun run audit:all --projects-root "$HOME/projects"
 bun run lint:changed origin/main
 ```
@@ -45,6 +46,21 @@ The audit reports local remotes, fetch refspecs, remote-tracking refs, locally r
 The audit is fully offline and read only: it does not fetch, contact a host, change a checkout, update refs, or write target-repository files. A locally missing remote-tracking ref means only that it cannot be verified from the locally available metadata; it does **not** establish that the remote branch does not exist. The report separates `technicalStatus` (`PASS` or `FAIL`) from `baselineStatus`: `MATCH` means the explicit contract was locally verified, `MISMATCH` means supplied ref and commit resolve to different commits, and `UNVERIFIED` means a required local ref or commit was unavailable. `MISMATCH` and `UNVERIFIED` produce `overallStatus: WARN` and exit 0; technical failures produce `overallStatus: FAIL` and exit 1.
 
 When a comparison resolves, `exactMatch` and its genealogy are reported as `same`, `expected-ancestor-of-comparison`, `comparison-ancestor-of-expected`, or `diverged`. `ahead` and `behind` are explicitly relative to the expected baseline: `ahead` counts comparison-only commits and `behind` counts expected-only commits.
+
+## Repository status
+
+`bun run audit:repository-status /path/to/repository` combines the existing profiled quality, offline Git-governance, and optional production-baseline audits into one read-only scorecard. It does not reimplement their rules or infer production truth.
+
+`QUALITY` passes only when the detected webapp or Python-service profile passes its required core checks. `GOVERNANCE` preserves the Git governance audit's `PASS`, `WARN`, or `FAIL` result. `BASELINE` is run only when `--expected-ref <git-ref>` and/or `--expected-commit <commit>` is explicitly supplied; all three baseline options are forwarded unchanged, including the baseline auditor's revision-expression restrictions.
+
+Without an explicit baseline selector, the scorecard reports `baselineConfigured: false` in JSON and `BASELINE NOT_CONFIGURED`. This means no production truth has been declared; it never selects from production-like candidates, `main`, `origin/main`, or a remote default branch. It is a readiness warning, not a technical defect.
+
+```sh
+bun run audit:repository-status /path/to/repository --expected-ref origin/production/example --compare-ref HEAD
+bun run audit:repository-status /path/to/repository --expected-ref origin/production/example --compare-ref HEAD --json
+```
+
+The top-level JSON has stable `root`, `profile`, `baselineConfigured`, `dimensions`, `technicalStatus`, `overallStatus`, and `summary` fields. `WARN` is not a technical failure: governance warnings, an unconfigured baseline, and baseline `MISMATCH` or `UNVERIFIED` exit 0. The command exits 1 only for `overallStatus: FAIL`, including quality failure, governance technical failure, or a configured baseline technical failure; it exits 0 for `PASS` and `WARN`.
 
 ## Multi-repository audit
 
