@@ -18,6 +18,7 @@ Requires Bun and Node.js 20 or newer.
 bun install --frozen-lockfile
 bun run check
 bun run audit /path/to/repository
+bun run audit:git-governance /path/to/repository
 bun run audit:all --projects-root "$HOME/projects"
 bun run lint:changed origin/main
 ```
@@ -29,6 +30,12 @@ node scripts/audit-repository.js /path/to/repository
 ```
 
 It prints a human-readable scorecard and never modifies the target. The score has 18 checks: 13 required core checks plus five optional documentation/E2E indicators. E2E readiness consists of a Playwright config, an E2E package script, and CI invocation; it does not affect the 13/13 core result. The process exits non-zero only when a required core check is absent. Add `--json` to the direct command for the engine's machine-readable report.
+
+## Offline Git governance audit
+
+`bun run audit:git-governance /path/to/repository` reads local Git metadata and refs to make branch governance visible. It is read only: it never fetches, pulls, switches branches, writes Git configuration, or contacts a Git host. Add `--json` for a machine-readable report.
+
+The audit reports local remotes, fetch refspecs, remote-tracking refs, locally resolvable remote `HEAD` refs, current-branch upstream and ahead/behind state, plus names that look production-like (`production`, `production/*`, `prod`, or `prod/*`). A production-like name is only a candidate: the audit never decides which branch is the canonical production truth. Restricted fetch refspecs, missing local remote `HEAD`, absent upstreams, and branch divergence are governance warnings rather than code-quality failures. This first version makes no network verification, including no GitHub default-branch or branch-protection lookup.
 
 ## Multi-repository audit
 
@@ -102,6 +109,7 @@ Useful commands:
 - bun run audit:drift /path/to/app-one /path/to/app-two
 - bun run audit:safety .
 - bun run audit:architecture --policy /private/path/policy.json
+- bun run audit:git-governance /path/to/repository --json
 - bun run bootstrap /path/to/repository --dry-run
 - bun run remediation:plan /path/to/repository
 - bun run remediation:apply /path/to/repository --dry-run
