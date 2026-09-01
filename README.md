@@ -62,6 +62,51 @@ bun run audit:repository-status /path/to/repository --expected-ref origin/produc
 
 The top-level JSON has stable `root`, `profile`, `baselineConfigured`, `dimensions`, `technicalStatus`, `overallStatus`, and `summary` fields. `WARN` is not a technical failure: governance warnings, an unconfigured baseline, and baseline `MISMATCH` or `UNVERIFIED` exit 0. The command exits 1 only for `overallStatus: FAIL`, including quality failure, governance technical failure, or a configured baseline technical failure; it exits 0 for `PASS` and `WARN`.
 
+## Ecosystem status
+
+`bun run audit:ecosystem-status` aggregates the canonical repository-status report for several repositories. It does not add QUALITY, GOVERNANCE, or BASELINE rules, choose a branch, or infer a production baseline from `main`, remote `HEAD`, or governance production candidates.
+
+Use positional repository paths when no repository has a configured production baseline. Every positional repository therefore reports `BASELINE NOT_CONFIGURED` and contributes an overall warning when its other dimensions pass:
+
+```sh
+bun run audit:ecosystem-status /path/to/app-a /path/to/worker-b --json
+```
+
+Use `--config` for explicit, per-repository baseline selectors. Positional paths and `--config` are mutually exclusive. Version 1 configuration uses this contract (relative repository paths are resolved relative to the config file):
+
+```json
+{
+  "version": 1,
+  "repositories": [
+    {
+      "name": "app-a",
+      "path": "/path/to/app-a",
+      "expectedRef": "origin/production",
+      "compareRef": "HEAD"
+    },
+    {
+      "name": "worker-b",
+      "path": "/path/to/worker-b",
+      "expectedCommit": "abc1234"
+    },
+    {
+      "path": "/path/to/app-c"
+    }
+  ]
+}
+```
+
+`name` is display metadata only. A repository with no `expectedRef` or `expectedCommit` remains `NOT_CONFIGURED`; `compareRef` requires one of those selectors. Baseline ref and commit validation is delegated unchanged to the repository-status baseline auditor. Duplicate resolved target paths are rejected, preventing duplicate counts.
+
+```sh
+bun run audit:ecosystem-status --config /private/path/ecosystem-status.json
+bun run audit:ecosystem-status --config /private/path/ecosystem-status.json --json
+```
+
+The stable JSON report contains `inputMode`, optional `configVersion`, ordered `repositories`, machine-readable `summary`, `technicalStatus`, and `overallStatus`; it never prints config-file contents or the config path. Overall status is `FAIL` when any repository fails, otherwise `WARN` when any repository warns, otherwise `PASS`. Technical status fails only when at least one repository has a technical failure. `FAIL` exits 1; `PASS` and `WARN` exit 0. A failed or missing target is isolated to that repository so the remaining repositories are still inspected.
+
+The command is read only and offline. The ecosystem layer only reads an explicitly supplied JSON config and calls the in-process repository-status inspector; it runs no Git command itself and performs no fetch, network request, checkout, or target-repository write.
+
 ## Multi-repository audit
 
 `bun run audit:all` audits the latest `origin/main` of the five default application repositories beneath `~/projects`. It runs sequentially and prints one row per repository plus aggregate total and core scores. Override the parent directory or selection without editing the script:
