@@ -20,6 +20,7 @@ bun run check
 bun run audit /path/to/repository
 bun run audit:git-governance /path/to/repository
 bun run audit:production-baseline /path/to/repository --expected-ref origin/production/example --compare-ref HEAD
+bun run audit:deployment /path/to/repository --expected-ref origin/production/example --deployed-commit 0123456789abcdef0123456789abcdef01234567
 bun run audit:repository-status /path/to/repository --expected-ref origin/production/example --compare-ref HEAD
 bun run audit:all --projects-root "$HOME/projects"
 bun run lint:changed origin/main
@@ -46,6 +47,22 @@ The audit reports local remotes, fetch refspecs, remote-tracking refs, locally r
 The audit is fully offline and read only: it does not fetch, contact a host, change a checkout, update refs, or write target-repository files. A locally missing remote-tracking ref means only that it cannot be verified from the locally available metadata; it does **not** establish that the remote branch does not exist. The report separates `technicalStatus` (`PASS` or `FAIL`) from `baselineStatus`: `MATCH` means the explicit contract was locally verified, `MISMATCH` means supplied ref and commit resolve to different commits, and `UNVERIFIED` means a required local ref or commit was unavailable. `MISMATCH` and `UNVERIFIED` produce `overallStatus: WARN` and exit 0; technical failures produce `overallStatus: FAIL` and exit 1.
 
 When a comparison resolves, `exactMatch` and its genealogy are reported as `same`, `expected-ancestor-of-comparison`, `comparison-ancestor-of-expected`, or `diverged`. `ahead` and `behind` are explicitly relative to the expected baseline: `ahead` counts comparison-only commits and `behind` counts expected-only commits.
+
+## Deployment verification
+
+`bun run audit:deployment /path/to/repository --expected-ref origin/production/example --deployed-commit 0123456789abcdef0123456789abcdef01234567` answers one narrow question: whether an explicitly supplied deployed commit exactly equals an explicitly declared production baseline. Supply at least one baseline selector, `--expected-ref <git-ref>` and/or `--expected-commit <commit>`, plus `--deployed-commit <commit>`. The deployed value must be a full 40-character SHA-1 or 64-character SHA-256 object ID; abbreviated IDs, refs, and revision expressions are rejected. Hex case is normalized for comparison.
+
+The deployed commit is caller-supplied runtime evidence, represented in the report as `evidence.type: "explicit-commit"`, `source: "caller-supplied"`, and `authenticated: false`. This auditor does not collect or cryptographically authenticate runtime evidence. It makes no SSH, system, container, HTTP, Git-host, or remote-runtime request, and never reads runtime state or private configuration.
+
+For direct in-process callers, an absent or invalid deployed value is reported as `deploymentStatus: "UNVERIFIED"` with an evidence warning; it is never treated as a proven mismatch. The CLI continues to reject invalid deployed values during argument validation.
+
+`deploymentStatus` is `MATCH` when that evidence equals a reliably locally resolved baseline, `MISMATCH` when it reliably differs, and `UNVERIFIED` when the baseline cannot be established locally or the supplied ref-and-commit contract is inconsistent. It does not select a branch from `production/*`, `main`, a remote default, or governance candidates. `technicalStatus` is independent: a baseline-inspection failure is `FAIL`; otherwise it is `PASS`. `MATCH` produces overall `PASS`; `MISMATCH` and `UNVERIFIED` produce overall `WARN` and exit 0; technical `FAIL` produces overall `FAIL` and exit 1. No deployment genealogy is inferred.
+
+Use `--json` for the stable machine-readable report:
+
+```sh
+bun run audit:deployment /path/to/repository --expected-commit 0123456789abcdef0123456789abcdef01234567 --deployed-commit 0123456789abcdef0123456789abcdef01234567 --json
+```
 
 ## Repository status
 

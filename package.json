@@ -20,6 +20,7 @@
     "audit:architecture": "node scripts/audit-architecture-compliance.js",
     "audit:git-governance": "node scripts/audit-git-governance.js",
     "audit:production-baseline": "node scripts/audit-production-baseline.js",
+    "audit:deployment": "node scripts/audit-deployment-verification.js",
     "audit:repository-status": "node scripts/audit-repository-status.js",
     "audit:ecosystem-status": "node scripts/audit-ecosystem-status.js",
     "audit:release": "node scripts/audit-release-readiness.js",
