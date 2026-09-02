@@ -64,6 +64,49 @@ Use `--json` for the stable machine-readable report:
 bun run audit:deployment /path/to/repository --expected-commit 0123456789abcdef0123456789abcdef01234567 --deployed-commit 0123456789abcdef0123456789abcdef01234567 --json
 ```
 
+## Runtime evidence contract
+
+`bun run runtime:evidence --file ./runtime-evidence.json` validates a versioned, machine-readable runtime-evidence document. Version 1 is deliberately a contract boundary: a collector supplies evidence, this command normalizes and validates it, and a later deployment-verification capability may compare it with an explicit production baseline. This command does not inspect a baseline or decide what any runtime environment means.
+
+Version 1 accepts this schema. Required string values are trimmed during normalization; commits are also normalized to lowercase.
+
+```json
+{
+  "version": 1,
+  "runtime": {
+    "name": "runtime-a",
+    "environment": "production"
+  },
+  "deployment": {
+    "commit": "0123456789abcdef0123456789abcdef01234567"
+  },
+  "evidence": {
+    "source": "manual",
+    "authenticated": false,
+    "collectedAt": "2026-09-01T12:00:00Z"
+  },
+  "metadata": {
+    "collectorNote": "generic example"
+  }
+}
+```
+
+`version` must be exactly `1`. `runtime.name`, `deployment.commit`, and all fields in `evidence` are required; `runtime.environment` is optional metadata with no special meaning. A commit must be a full 40-character SHA-1 or 64-character SHA-256 hexadecimal object ID—never an abbreviation, ref, `HEAD`, branch name, or revision expression. `collectedAt` must be a real absolute ISO 8601 calendar timestamp with a timezone (`Z` or an offset); no collection time is generated automatically. Unknown fields are rejected in the version-1 top level, `runtime`, `deployment`, and `evidence` objects. `metadata` is the extension location and may contain only JSON-serializable values. As a small structural safeguard, metadata keys are split into camelCase and separator-delimited components, normalized to lowercase, and rejected only when a component is exactly `token`, `tokens`, `password`, `passwords`, `secret`, `secrets`, `credential`, `credentials`, `env`, or `environment`; this check is case-insensitive and recursive, including objects inside arrays. Metadata values are not scanned; this remains a structural key safeguard, not a secrets scanner. Evidence must not contain credentials, tokens, environment values, or other secrets.
+
+The validation API is `validateRuntimeEvidence(value)`. It never throws for ordinary schema failures and returns a stable result: `{ valid, evidence, errors }`. On success, `evidence` contains the normalized document; on failure it is `null` and `errors` contains stable machine-readable IDs.
+
+Use JSON output when another program consumes the normalized result:
+
+```sh
+bun run runtime:evidence --file ./runtime-evidence.json --json
+```
+
+The command accepts only `--file <path>` and `--json`. A missing option, unknown option, unreadable file, malformed JSON, or invalid schema exits 1; valid schema exits 0. Human output lists the runtime, environment, commit, source, authenticated state, collection time, and `Result: VALID`.
+
+Schema validity is not proof that the evidence is authenticated, and `authenticated: true` is not proof that its claims are correct. `source`, `authenticated`, and `collectedAt` remain collector-supplied trust metadata; this contract assigns no automatic trust meaning to a source and does not infer authentication. Comparing structurally valid evidence to a baseline also does not prove runtime authenticity. Collectors remain responsible for gathering and representing their own evidence.
+
+The command is offline and read only. It reads only the explicitly supplied evidence JSON file, never changes that file, and performs no Git inspection or command, network, SSH, systemd, Docker, HTTP, runtime probe, environment-variable or `.env` read, baseline inspection, or timestamp generation. It does not collect evidence automatically.
+
 ## Repository status
 
 `bun run audit:repository-status /path/to/repository` combines the existing profiled quality, offline Git-governance, and optional production-baseline audits into one read-only scorecard. It does not reimplement their rules or infer production truth.
