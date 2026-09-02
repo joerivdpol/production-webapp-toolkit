@@ -24,6 +24,7 @@
     "audit:repository-status": "node scripts/audit-repository-status.js",
     "audit:ecosystem-status": "node scripts/audit-ecosystem-status.js",
     "audit:release": "node scripts/audit-release-readiness.js",
+    "runtime:evidence": "node scripts/runtime-evidence.js",
     "bootstrap": "node scripts/bootstrap-repository.js",
     "remediation:plan": "node scripts/plan-remediation.js",
     "remediation:apply": "node scripts/apply-remediation.js",
