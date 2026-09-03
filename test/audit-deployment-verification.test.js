@@ -35,12 +35,37 @@ function writeCommit(root, name) {
   return git(root, ["rev-parse", "HEAD"]);
 }
 
-function createRepository() {
+/** @param {{ objectFormat?: "sha1" | "sha256" }} [options] */
+function createRepository(options = {}) {
   const root = temporaryDirectory("deployment-verification-");
-  execFileSync("git", ["init", "-b", "main", root], { stdio: "ignore" });
+  const initArguments = ["init", "-b", "main"];
+  if (options.objectFormat === "sha256") initArguments.push("--object-format=sha256");
+  initArguments.push(root);
+  execFileSync("git", initArguments, { stdio: "ignore" });
   git(root, ["config", "user.email", "test@example.invalid"]);
   git(root, ["config", "user.name", "Toolkit Test"]);
   return { root, initial: writeCommit(root, "initial") };
+}
+
+/** @param {string} commit @returns {{ version: number, runtime: { name: string, environment?: string }, deployment: { commit: string }, evidence: { source: string, authenticated: boolean, collectedAt: string }, metadata?: Record<string, unknown> }} */
+function validRuntimeEvidence(commit) {
+  return {
+    version: 1,
+    runtime: { name: "synthetic-runtime", environment: "synthetic-environment" },
+    deployment: { commit },
+    evidence: {
+      source: "synthetic-source",
+      authenticated: false,
+      collectedAt: "2026-09-01T12:00:00Z",
+    },
+  };
+}
+
+/** @param {string} root @param {unknown} content */
+function writeEvidenceFile(root, content) {
+  const filename = path.join(root, `runtime-evidence-${fixtures.length}.json`);
+  fs.writeFileSync(filename, typeof content === "string" ? content : JSON.stringify(content, null, 2));
+  return filename;
 }
 
 /** @param {...string} args */
@@ -221,6 +246,159 @@ test("normalizes full uppercase object IDs before comparison", () => {
   assert.equal(report.deploymentStatus, "MATCH");
 });
 
+test("accepts a validated SHA-1 evidence file and retains its trust metadata", () => {
+  const { root, initial } = createRepository();
+  const filename = writeEvidenceFile(root, validRuntimeEvidence(initial));
+  const result = runCli(root, "--expected-ref", "main", "--evidence-file", filename, "--json");
+
+  assert.equal(result.status, 0);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.deployedCommit, initial);
+  assert.equal(report.deploymentStatus, "MATCH");
+  assert.equal(report.overallStatus, "PASS");
+  assert.deepEqual(report.evidence, {
+    type: "runtime-evidence",
+    source: "synthetic-source",
+    authenticated: false,
+    collectedAt: "2026-09-01T12:00:00Z",
+    runtime: { name: "synthetic-runtime", environment: "synthetic-environment" },
+  });
+});
+
+test("accepts a validated SHA-256 evidence file", () => {
+  const { root, initial } = createRepository({ objectFormat: "sha256" });
+  assert.equal(initial.length, 64);
+  const filename = writeEvidenceFile(root, validRuntimeEvidence(initial));
+  const result = runCli(root, "--expected-ref", "main", "--evidence-file", filename, "--json");
+
+  assert.equal(result.status, 0);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.deploymentStatus, "MATCH");
+  assert.equal(report.deployedCommit, initial);
+});
+
+test("normalizes uppercase evidence commits through the runtime evidence validator", () => {
+  const { root, initial } = createRepository();
+  const evidence = validRuntimeEvidence(initial.toUpperCase());
+  const result = runCli(root, "--expected-ref", "main", "--evidence-file", writeEvidenceFile(root, evidence), "--json");
+
+  assert.equal(result.status, 0);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.deployedCommit, initial);
+  assert.equal(report.deploymentStatus, "MATCH");
+});
+
+test("evidence files preserve non-technical mismatch and unavailable-baseline semantics", () => {
+  const { root, initial } = createRepository();
+  const different = writeCommit(root, "deployment-difference");
+  git(root, ["branch", "production-baseline", initial]);
+  const mismatch = runCli(
+    root,
+    "--expected-ref",
+    "production-baseline",
+    "--evidence-file",
+    writeEvidenceFile(root, validRuntimeEvidence(different)),
+    "--json",
+  );
+  assert.equal(mismatch.status, 0);
+  assert.equal(JSON.parse(mismatch.stdout).deploymentStatus, "MISMATCH");
+  assert.equal(JSON.parse(mismatch.stdout).overallStatus, "WARN");
+
+  const unavailable = runCli(
+    root,
+    "--expected-ref",
+    "origin/production/not-locally-fetched",
+    "--evidence-file",
+    writeEvidenceFile(root, validRuntimeEvidence(initial)),
+    "--json",
+  );
+  assert.equal(unavailable.status, 0);
+  assert.equal(JSON.parse(unavailable.stdout).deploymentStatus, "UNVERIFIED");
+  assert.equal(JSON.parse(unavailable.stdout).overallStatus, "WARN");
+});
+
+test("authenticated runtime evidence remains trust metadata, not deployment truth", () => {
+  const { root, initial } = createRepository();
+  const different = writeCommit(root, "authenticated-difference");
+  git(root, ["branch", "production-baseline", initial]);
+  const evidence = validRuntimeEvidence(different);
+  evidence.evidence.authenticated = true;
+  delete evidence.runtime.environment;
+  const result = runCli(
+    root,
+    "--expected-ref",
+    "production-baseline",
+    "--evidence-file",
+    writeEvidenceFile(root, evidence),
+    "--json",
+  );
+
+  assert.equal(result.status, 0);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.deploymentStatus, "MISMATCH");
+  assert.equal(report.overallStatus, "WARN");
+  assert.deepEqual(report.evidence, {
+    type: "runtime-evidence",
+    source: "synthetic-source",
+    authenticated: true,
+    collectedAt: "2026-09-01T12:00:00Z",
+    runtime: { name: "synthetic-runtime" },
+  });
+});
+
+test("rejects invalid, malformed, and inaccessible evidence files as CLI input failures", () => {
+  const { root, initial } = createRepository();
+  /** @type {[string, (evidence: ReturnType<typeof validRuntimeEvidence>) => void][]} */
+  const invalidEvidence = [
+    ["HEAD", (evidence) => { evidence.deployment.commit = "HEAD"; }],
+    ["abbreviated", (evidence) => { evidence.deployment.commit = initial.slice(0, 12); }],
+    ["unknown-field", (evidence) => { /** @type {Record<string, unknown>} */ (evidence).unexpected = true; }],
+    ["timestamp", (evidence) => { evidence.evidence.collectedAt = "not-a-timestamp"; }],
+    ["metadata", (evidence) => { evidence.metadata = { apiToken: "synthetic" }; }],
+  ];
+
+  for (const [name, mutate] of invalidEvidence) {
+    const evidence = validRuntimeEvidence(initial);
+    mutate(evidence);
+    const result = runCli(root, "--expected-ref", "main", "--evidence-file", writeEvidenceFile(root, evidence));
+    assert.equal(result.status, 1, name);
+    assert.match(result.stderr, /Runtime Evidence Contract v1/, name);
+  }
+
+  for (const invalidFile of [
+    { name: "malformed", filename: writeEvidenceFile(root, "{"), expected: /malformed JSON/ },
+    { name: "missing", filename: path.join(root, "missing-runtime-evidence.json"), expected: /could not be read/ },
+  ]) {
+    const result = runCli(root, "--expected-ref", "main", "--evidence-file", invalidFile.filename);
+    assert.equal(result.status, 1, invalidFile.name);
+    assert.match(result.stderr, invalidFile.expected, invalidFile.name);
+  }
+});
+
+test("evidence-file CLI mode is exclusive, stable, clear, and does not change input", () => {
+  const { root, initial } = createRepository();
+  const filename = writeEvidenceFile(root, validRuntimeEvidence(initial));
+  const original = fs.readFileSync(filename, "utf8");
+
+  for (const result of [
+    runCli(root, "--expected-ref", "main", "--deployed-commit", initial, "--evidence-file", filename),
+    runCli(root, "--expected-ref", "main"),
+    runCli(root, "--expected-ref", "main", "--unknown", "--evidence-file", filename),
+    runCli(root, "--expected-ref", "main", "--evidence-file"),
+  ]) {
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Usage:/);
+  }
+
+  const json = runCli(root, "--expected-ref", "main", "--evidence-file", filename, "--json");
+  assert.equal(json.status, 0);
+  assert.equal(JSON.parse(json.stdout).evidence.type, "runtime-evidence");
+  const human = runCli(root, "--expected-ref", "main", "--evidence-file", filename);
+  assert.equal(human.status, 0);
+  assert.match(human.stdout, /validated Runtime Evidence Contract v1/);
+  assert.equal(fs.readFileSync(filename, "utf8"), original);
+});
+
 test("keeps invalid in-process deployed evidence unverified", () => {
   const invalidValues = ["HEAD", "abc123", "HEAD~1"];
 
@@ -243,6 +421,41 @@ test("keeps invalid in-process deployed evidence unverified", () => {
     assert.match(
       report.checks.find((check) => check.id === "deployment-evidence")?.detail ?? "",
       /valid full 40- or 64-character hex object ID/,
+    );
+  }
+});
+
+test("does not let direct callers forge runtime-evidence provenance or bypass commit validation", () => {
+  const { root } = createRepository();
+  /** @type {{ type: "runtime-evidence", source: string, authenticated: boolean, collectedAt: string, runtime: { name: string } }} */
+  const forgedEvidence = {
+    type: "runtime-evidence",
+    source: "forged-source",
+    authenticated: true,
+    collectedAt: "2026-09-01T12:00:00Z",
+    runtime: { name: "forged-runtime" },
+  };
+
+  for (const deployedCommit of ["HEAD", "abc123", "HEAD~1"]) {
+    const report = inspectDeploymentVerification(root, {
+      expectedRef: "main",
+      deployedCommit,
+      evidence: forgedEvidence,
+    });
+
+    assert.equal(report.deploymentStatus, "UNVERIFIED", deployedCommit);
+    assert.notEqual(report.deploymentStatus, "MISMATCH", deployedCommit);
+    assert.equal(report.technicalStatus, "PASS", deployedCommit);
+    assert.equal(report.overallStatus, "WARN", deployedCommit);
+    assert.deepEqual(report.evidence, {
+      type: "explicit-commit",
+      source: "caller-supplied",
+      authenticated: false,
+    });
+    assert.doesNotMatch(
+      formatDeploymentVerification(report),
+      /validated Runtime Evidence Contract v1/,
+      deployedCommit,
     );
   }
 });
@@ -304,11 +517,13 @@ test("JSON and human output expose the stable deployment and trust contract", ()
   }
 });
 
-test("the deployment layer adds no direct Git command surface", () => {
+test("the deployment layer reuses the canonical validator and adds no runtime or network command surface", () => {
   const source = fs.readFileSync(path.resolve("scripts/audit-deployment-verification.js"), "utf8");
 
   assert.match(source, /inspectProductionBaseline/);
-  for (const forbidden of ["child_process", "spawnSync", "execFile", "readGit", "fetch", "remote"]) {
+  assert.match(source, /import \{ validateRuntimeEvidence \} from "\.\/runtime-evidence\.js"/);
+  assert.match(source, /validateRuntimeEvidence\(input\)/);
+  for (const forbidden of ["child_process", "spawnSync", "execFile", "readGit", "fetch", "process.env", "https://", "http://"]) {
     assert.equal(source.includes(forbidden), false, `forbidden ${forbidden} surface`);
   }
 });
