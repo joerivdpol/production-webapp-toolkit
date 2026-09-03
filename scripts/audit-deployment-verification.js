@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
+import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { inspectProductionBaseline } from "./audit-production-baseline.js";
+import { validateRuntimeEvidence } from "./runtime-evidence.js";
 
 /** @typedef {"PASS" | "WARN" | "FAIL"} Severity */
 /** @typedef {{ id: string, severity: Severity, detail: string }} DeploymentCheck */
@@ -11,9 +13,11 @@ import { inspectProductionBaseline } from "./audit-production-baseline.js";
  * @typedef {{
  *   expectedRef?: string | null,
  *   expectedCommit?: string | null,
- *   deployedCommit?: string | null
+ *   deployedCommit?: string | null,
+ *   evidence?: DeploymentEvidence
  * }} DeploymentOptions
  */
+/** @typedef {{ type: "explicit-commit", source: "caller-supplied", authenticated: false } | { type: "runtime-evidence", source: string, authenticated: boolean, collectedAt: string, runtime: { name: string, environment?: string } }} DeploymentEvidence */
 /**
  * @typedef {{
  *   root: string,
@@ -22,7 +26,7 @@ import { inspectProductionBaseline } from "./audit-production-baseline.js";
  *   expectedResolvedCommit: string | null,
  *   baselineStatus: "MATCH" | "MISMATCH" | "UNVERIFIED",
  *   deployedCommit: string | null,
- *   evidence: { type: "explicit-commit", source: "caller-supplied", authenticated: false },
+ *   evidence: DeploymentEvidence,
  *   deploymentStatus: "MATCH" | "MISMATCH" | "UNVERIFIED",
  *   technicalStatus: "PASS" | "FAIL",
  *   overallStatus: "PASS" | "WARN" | "FAIL",
@@ -51,23 +55,57 @@ function errorDetail(error) {
   return error instanceof Error ? error.message : "production baseline inspection failed";
 }
 
+/** @param {DeploymentOptions} options @returns {DeploymentEvidence} */
+function deploymentEvidence(options) {
+  return options.evidence ?? {
+    type: "explicit-commit",
+    source: "caller-supplied",
+    authenticated: false,
+  };
+}
+
+/** @param {import("./runtime-evidence.js").RuntimeEvidence} evidence @returns {DeploymentEvidence} */
+function runtimeEvidenceTrustMetadata(evidence) {
+  return {
+    type: "runtime-evidence",
+    source: evidence.evidence.source,
+    authenticated: evidence.evidence.authenticated,
+    collectedAt: evidence.evidence.collectedAt,
+    runtime: {
+      name: evidence.runtime.name,
+      ...(evidence.runtime.environment === undefined ? {} : { environment: evidence.runtime.environment }),
+    },
+  };
+}
+
+/** @param {DeploymentEvidence} evidence */
+function evidenceDescription(evidence) {
+  return evidence.type === "runtime-evidence"
+    ? "validated Runtime Evidence Contract v1 deployment commit; trust metadata is not authenticated by this auditor"
+    : "deployed commit is explicit caller-supplied evidence and is not authenticated by this auditor";
+}
+
+/** @param {DeploymentEvidence} evidence */
+function evidenceSubject(evidence) {
+  return evidence.type === "runtime-evidence"
+    ? "validated runtime evidence commit"
+    : "caller-supplied deployed commit";
+}
+
 /**
- * Compare caller-supplied runtime evidence with an explicitly supplied,
+ * Compare normalized deployment evidence with an explicitly supplied,
  * locally inspectable production baseline. This function intentionally does
- * not collect runtime evidence or execute Git commands itself.
+ * not validate evidence, collect runtime evidence, or execute Git commands
+ * itself. Its callers must establish the evidence provenance before calling
+ * it.
  *
  * @param {string} target
- * @param {DeploymentOptions} options
+ * @param {{ expectedRef?: string | null, expectedCommit?: string | null, deployedCommit: string | null, evidence: DeploymentEvidence }} options
  * @returns {DeploymentVerificationReport}
  */
-export function inspectDeploymentVerification(target, options = {}) {
-  const suppliedDeployedCommit = options.deployedCommit;
-  const hasInvalidDeployedEvidence =
-    typeof suppliedDeployedCommit !== "string" || !isFullObjectId(suppliedDeployedCommit);
-  const deployedCommit =
-    !hasInvalidDeployedEvidence
-      ? suppliedDeployedCommit.toLowerCase()
-      : null;
+function inspectNormalizedDeploymentVerification(target, options) {
+  const hasInvalidDeployedEvidence = options.deployedCommit === null;
+  const deployedCommit = options.deployedCommit?.toLowerCase() ?? null;
 
   let baseline;
   try {
@@ -84,11 +122,7 @@ export function inspectDeploymentVerification(target, options = {}) {
       expectedResolvedCommit: null,
       baselineStatus: "UNVERIFIED",
       deployedCommit,
-      evidence: {
-        type: "explicit-commit",
-        source: "caller-supplied",
-        authenticated: false,
-      },
+      evidence: deploymentEvidence(options),
       deploymentStatus: "UNVERIFIED",
       technicalStatus: "FAIL",
       overallStatus: "FAIL",
@@ -117,11 +151,7 @@ export function inspectDeploymentVerification(target, options = {}) {
         : null,
     baselineStatus: baseline.baselineStatus,
     deployedCommit,
-    evidence: {
-      type: "explicit-commit",
-      source: "caller-supplied",
-      authenticated: false,
-    },
+    evidence: deploymentEvidence(options),
     deploymentStatus: "UNVERIFIED",
     technicalStatus: baseline.technicalStatus,
     overallStatus: "WARN",
@@ -133,7 +163,7 @@ export function inspectDeploymentVerification(target, options = {}) {
     severity: hasInvalidDeployedEvidence ? "WARN" : "PASS",
     detail: hasInvalidDeployedEvidence
       ? "caller-supplied deployed commit is not a valid full 40- or 64-character hex object ID"
-      : "deployed commit is explicit caller-supplied evidence and is not authenticated by this auditor",
+      : evidenceDescription(report.evidence),
   });
 
   if (report.technicalStatus === "FAIL") {
@@ -168,22 +198,65 @@ export function inspectDeploymentVerification(target, options = {}) {
     report.checks.push({
       id: "deployment-baseline",
       severity: "PASS",
-      detail: "caller-supplied deployed commit matches the locally resolved expected baseline",
+      detail: `${evidenceSubject(report.evidence)} matches the locally resolved expected baseline`,
     });
   } else {
     report.deploymentStatus = "MISMATCH";
     report.checks.push({
       id: "deployment-baseline",
       severity: "WARN",
-      detail: "caller-supplied deployed commit differs from the locally resolved expected baseline",
+      detail: `${evidenceSubject(report.evidence)} differs from the locally resolved expected baseline`,
     });
   }
 
   return deriveOverallStatus(report);
 }
 
+/**
+ * Compare a directly supplied deployed object ID with the production
+ * baseline. Direct callers cannot establish canonical runtime-evidence
+ * provenance by supplying a metadata discriminator.
+ *
+ * @param {string} target
+ * @param {DeploymentOptions} options
+ * @returns {DeploymentVerificationReport}
+ */
+export function inspectDeploymentVerification(target, options = {}) {
+  const suppliedDeployedCommit = options.deployedCommit;
+  const hasInvalidDeployedEvidence =
+    typeof suppliedDeployedCommit !== "string" || !isFullObjectId(suppliedDeployedCommit);
+
+  if (hasInvalidDeployedEvidence) {
+    return inspectNormalizedDeploymentVerification(target, {
+      expectedRef: options.expectedRef ?? null,
+      expectedCommit: options.expectedCommit ?? null,
+      deployedCommit: null,
+      evidence: {
+        type: "explicit-commit",
+        source: "caller-supplied",
+        authenticated: false,
+      },
+    });
+  }
+
+  return inspectNormalizedDeploymentVerification(target, {
+    expectedRef: options.expectedRef ?? null,
+    expectedCommit: options.expectedCommit ?? null,
+    deployedCommit: suppliedDeployedCommit,
+    evidence: {
+      type: "explicit-commit",
+      source: "caller-supplied",
+      authenticated: false,
+    },
+  });
+}
+
 /** @param {DeploymentVerificationReport} report */
 export function formatDeploymentVerification(report) {
+  const evidenceDescription =
+    report.evidence.type === "runtime-evidence"
+      ? `validated Runtime Evidence Contract v1; source: ${report.evidence.source}; authenticated: ${report.evidence.authenticated}; collected at: ${report.evidence.collectedAt}; runtime: ${report.evidence.runtime.name}${report.evidence.runtime.environment === undefined ? "" : `; environment: ${report.evidence.runtime.environment}`}`
+      : "caller supplied; unauthenticated";
   const lines = [
     `Deployment verification: ${report.root}`,
     "",
@@ -191,7 +264,7 @@ export function formatDeploymentVerification(report) {
     `Expected ref: ${report.expectedRef ?? "(not supplied)"}`,
     `Expected commit: ${report.expectedCommit ?? "(not supplied)"}`,
     `Deployed commit: ${report.deployedCommit ?? "(invalid or unavailable)"}`,
-    "Deployed evidence: caller supplied; unauthenticated",
+    `Deployed evidence: ${evidenceDescription}`,
     "",
   ];
 
@@ -209,7 +282,7 @@ export function formatDeploymentVerification(report) {
   return lines.join("\n");
 }
 
-/** @typedef {{ expectedRef: string | null, expectedCommit: string | null, deployedCommit: string | null, json: boolean, target: string | null }} CliArguments */
+/** @typedef {{ expectedRef: string | null, expectedCommit: string | null, deployedCommit: string | null, evidenceFile: string | null, json: boolean, target: string | null }} CliArguments */
 /** @param {string[]} argv @returns {CliArguments | null} */
 export function parseArguments(argv) {
   /** @type {CliArguments} */
@@ -217,6 +290,7 @@ export function parseArguments(argv) {
     expectedRef: null,
     expectedCommit: null,
     deployedCommit: null,
+    evidenceFile: null,
     json: false,
     target: null,
   };
@@ -230,7 +304,8 @@ export function parseArguments(argv) {
     } else if (
       argument === "--expected-ref" ||
       argument === "--expected-commit" ||
-      argument === "--deployed-commit"
+      argument === "--deployed-commit" ||
+      argument === "--evidence-file"
     ) {
       const value = argv[index + 1];
       if (typeof value !== "string" || !value || value.startsWith("--")) return null;
@@ -238,6 +313,7 @@ export function parseArguments(argv) {
       if (argument === "--expected-ref") options.expectedRef = value;
       if (argument === "--expected-commit") options.expectedCommit = value;
       if (argument === "--deployed-commit") options.deployedCommit = value;
+      if (argument === "--evidence-file") options.evidenceFile = value;
       index += 1;
     } else if (argument.startsWith("-")) {
       return null;
@@ -250,8 +326,9 @@ export function parseArguments(argv) {
 
   if (
     (!options.expectedRef && !options.expectedCommit) ||
-    !options.deployedCommit ||
-    !isFullObjectId(options.deployedCommit)
+    (options.deployedCommit === null && options.evidenceFile === null) ||
+    (options.deployedCommit !== null && options.evidenceFile !== null) ||
+    (options.deployedCommit !== null && !isFullObjectId(options.deployedCommit))
   ) {
     return null;
   }
@@ -263,15 +340,49 @@ export function main(argv = process.argv.slice(2)) {
   const options = parseArguments(argv);
   if (!options) {
     console.error(
-      "Usage: node scripts/audit-deployment-verification.js [repository] (--expected-ref <git-ref> | --expected-commit <commit>) --deployed-commit <40-or-64-hex-object-id> [--json]",
+      "Usage: node scripts/audit-deployment-verification.js [repository] (--expected-ref <git-ref> | --expected-commit <commit>) (--deployed-commit <40-or-64-hex-object-id> | --evidence-file <runtime-evidence.json>) [--json]",
     );
     return 1;
   }
 
-  const report = inspectDeploymentVerification(
-    options.target ?? process.cwd(),
-    options,
-  );
+  /** @type {DeploymentOptions} */
+  const inspectionOptions = {
+    expectedRef: options.expectedRef,
+    expectedCommit: options.expectedCommit,
+    deployedCommit: options.deployedCommit,
+  };
+  /** @type {DeploymentVerificationReport} */
+  let report;
+  if (options.evidenceFile !== null) {
+    let input;
+    try {
+      input = JSON.parse(fs.readFileSync(options.evidenceFile, "utf8"));
+    } catch (error) {
+      console.error(
+        error instanceof SyntaxError
+          ? "Deployment evidence file contains malformed JSON"
+          : "Deployment evidence file could not be read",
+      );
+      return 1;
+    }
+
+    const validation = validateRuntimeEvidence(input);
+    if (!validation.valid || !validation.evidence) {
+      console.error("Deployment evidence file does not satisfy Runtime Evidence Contract v1");
+      return 1;
+    }
+    const evidence = runtimeEvidenceTrustMetadata(validation.evidence);
+    inspectionOptions.deployedCommit = validation.evidence.deployment.commit;
+    inspectionOptions.evidence = evidence;
+    report = inspectNormalizedDeploymentVerification(options.target ?? process.cwd(), {
+      expectedRef: options.expectedRef,
+      expectedCommit: options.expectedCommit,
+      deployedCommit: validation.evidence.deployment.commit,
+      evidence,
+    });
+  } else {
+    report = inspectDeploymentVerification(options.target ?? process.cwd(), inspectionOptions);
+  }
   console.log(options.json ? JSON.stringify(report) : formatDeploymentVerification(report));
   return report.technicalStatus === "FAIL" ? 1 : 0;
 }
