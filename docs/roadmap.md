@@ -62,8 +62,9 @@ Core principles:
 * Artifact-bound dependency license evidence, installed-manifest collector, and explicit exact-expression policy audit: merged.
 * Build Reproducibility Policy v1 with lockfile, runtime, package-manager, frozen-install, and explicit generated-input hash checks: merged.
 * Artifact Provenance Contract v1 with explicit source, exact CI build, artifact SHA256, deployment artifact identity, and runtime binding: merged.
-* Explicit Change Surface Evidence v1 and policy-driven LOW/MEDIUM/HIGH release risk classification with concrete drivers: implementation complete on the active capability branch.
-* Automated changed surface analysis and the remaining production-readiness capabilities remain open.
+* Explicit Change Surface Evidence v1 and policy-driven LOW/MEDIUM/HIGH release risk classification with concrete drivers: merged.
+* Read-only Git changed-surface analyzer with explicit path policy, diff metrics, test/environment detection, and bounded npm major-upgrade detection: implementation complete on the active capability branch.
+* Policy-driven test selection and the remaining production-readiness capabilities remain open.
 
 10. Add CI evidence for the exact commit being evaluated, including tests, typecheck, lint, and build outcomes.
 11. Add read only GitHub branch protection and ruleset auditing.

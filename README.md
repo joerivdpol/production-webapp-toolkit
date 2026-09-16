@@ -793,3 +793,25 @@ bun run audit:release-risk --evidence-file ./change-surface-evidence.json --poli
 ```
 
 Both commands are offline and read only. Authentication metadata on change evidence is reported by the contract but does not change classification truth. Organization-specific risk policy belongs outside the public toolkit.
+
+### Automated changed surface analysis
+
+`bun run change:analyze` is the read-only local Git adapter for Change Surface Evidence v1. It compares two explicit full commit ids and emits aggregate diff metrics, policy-mapped engineering surfaces, whether configured test or environment paths changed, and an optional direct-dependency major-upgrade flag. Path-to-surface mapping remains explicit policy, so the public toolkit does not hardcode application directories or private business semantics.
+
+The policy uses bounded glob patterns for each supported surface plus explicit test and environment path patterns. Major dependency analysis can be disabled explicitly, or configured for one or more npm-style `package.json` files. When an existing dependency changes through a version expression the adapter cannot compare safely, analysis fails closed instead of claiming that no major upgrade occurred. Newly added or removed dependencies are not classified as major upgrades.
+
+```sh
+bun run change:analyze \
+  --root . \
+  --base-commit <full-base-sha> \
+  --head-commit <full-head-sha> \
+  --collected-at 2026-09-16T16:30:00Z \
+  --policy /private/path/changed-surface-policy.json \
+  --json > change-surface-evidence.json
+
+bun run audit:release-risk \
+  --evidence-file ./change-surface-evidence.json \
+  --policy /private/path/release-risk-policy.json
+```
+
+The adapter only performs local read-only Git inspection against caller-supplied full object ids and reads package manifests from those commits when the policy requests npm major-version analysis. It never checks out commits, mutates the working tree, calls the network, reads environment variables, or generates collection timestamps.
