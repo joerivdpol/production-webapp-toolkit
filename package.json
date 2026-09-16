@@ -50,6 +50,7 @@
     "security:snapshot:postgres:collect": "node scripts/collect-postgres-security-snapshot.js",
     "audit:postgres-security": "node scripts/audit-postgres-security.js",
     "api:contract": "node scripts/api-contract-snapshot.js",
+    "api:contract:openapi": "node scripts/openapi-api-contract.js",
     "audit:api-contract": "node scripts/audit-api-contract.js"
   },
   "devDependencies": {
