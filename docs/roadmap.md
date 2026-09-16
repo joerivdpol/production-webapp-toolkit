@@ -116,8 +116,9 @@ Core principles:
 * Browser-based SEO production checks for metadata, canonical URLs, robots, sitemap membership, hreflang, JSON-LD types, noindex and bounded internal-link health: merged.
 * Static localization completeness audit for catalog key parity, placeholder parity, bounded exact-reference fallback leakage, HTML policy, and explicit currency-formatting rules: merged.
 * Route Inventory v1 and explicit route coverage audit for route identity, auth-policy binding, test-file binding, and Synthetic Smoke Policy probe binding: merged.
-* TypeScript-AST authorization policy audit for policy-bound admin routes, server guard calls, centralized middleware guards, and client-only authorization patterns: implementation complete on the active capability branch.
-* Webhook safety profiles and the remaining operational assurance capabilities remain open.
+* TypeScript-AST authorization policy audit for policy-bound admin routes, server guard calls, centralized middleware guards, and client-only authorization patterns: merged.
+* Policy-driven webhook safety audit covering signature verification, idempotency, replay handling, event ordering, retry safety, and unknown-event handling using shared TypeScript AST call evidence: implementation complete on the active capability branch.
+* Payment integrity profiles and the remaining operational assurance capabilities remain open.
 
 35. Add runtime evidence collectors as separate adapters that emit Runtime Evidence Contract documents.
 36. Support local Git checkout evidence while clearly labeling it as checkout evidence, not process identity.

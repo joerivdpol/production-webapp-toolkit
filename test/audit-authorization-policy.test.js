@@ -150,9 +150,12 @@ test("CLI rejects malformed policy inventory missing repository and unknown opti
   fs.rmSync(malformed, { force: true });
 });
 
-test("authorization audit is local read only and uses TypeScript AST rather than raw regex truth", () => {
+test("authorization audit is local read only and delegates canonical TypeScript AST call evidence", () => {
   const source = fs.readFileSync(new URL("../scripts/audit-authorization-policy.js", import.meta.url), "utf8");
+  const helper = fs.readFileSync(new URL("../scripts/typescript-call-evidence.js", import.meta.url), "utf8");
   assert.doesNotMatch(source, /node:child_process|spawnSync|execFile|\bfetch\s*\(|process\.env|https?:\/\/|writeFile/);
-  assert.match(source, /ts\.isCallExpression/);
+  assert.doesNotMatch(helper, /node:child_process|spawnSync|execFile|\bfetch\s*\(|process\.env|https?:\/\/|writeFile/);
+  assert.match(source, /inspectTypeScriptCalls/);
+  assert.match(helper, /ts\.isCallExpression/);
   assert.match(source, /validateRouteInventory/);
 });

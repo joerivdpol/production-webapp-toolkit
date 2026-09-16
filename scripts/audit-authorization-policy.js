@@ -3,27 +3,22 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import ts from "typescript";
 
 import { validateRouteInventory } from "./route-inventory.js";
+import { calleeNameList, inspectTypeScriptCalls, sourcePathList } from "./typescript-call-evidence.js";
 
 const KINDS = new Set(["admin-route", "server-endpoint"]);
-const MAX_FILE_BYTES = 2 * 1024 * 1024;
-const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
-
+/** @param {unknown} value @param {number} [minimum] */
+function sourcePaths(value, minimum = 1) { return sourcePathList(value, { minimum }); }
+/** @param {unknown} value @param {number} [minimum] */
+function callees(value, minimum = 1) { return calleeNameList(value, { minimum }); }
+const inspectFileCalls = inspectTypeScriptCalls;
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 function object(value) { return typeof value === "object" && value !== null && !Array.isArray(value) && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null); }
 /** @param {unknown} value @param {number} [max] */
 function text(value, max = 256) { if (typeof value !== "string") return null; const normalized = value.trim(); return normalized.length > 0 && normalized.length <= max && !/[\u0000\r\n]/.test(normalized) ? normalized : null; }
 /** @param {Record<string,unknown>} value @param {string[]} allowed @param {string} scope @param {Array<{id:string,detail:string}>} errors */
 function unknown(value, allowed, scope, errors) { for (const key of Object.keys(value)) if (!allowed.includes(key)) errors.push({ id: `${scope}-field-unknown`, detail: `${scope} contains unsupported field "${key}"` }); }
-/** @param {unknown} value */
-function safeSourcePath(value) { const v = text(value, 512); if (!v || path.isAbsolute(v) || v.includes("\\")) return null; const normalized = path.posix.normalize(v); const extension = path.posix.extname(normalized).toLowerCase(); return normalized !== "." && normalized !== ".." && !normalized.startsWith("../") && normalized === v && SOURCE_EXTENSIONS.has(extension) ? normalized : null; }
-/** @param {unknown} value @param {number} [minimum] */
-function sourcePaths(value, minimum = 1) { if (!Array.isArray(value) || value.length < minimum || value.length > 128) return null; const paths = value.map(safeSourcePath); if (paths.some((item) => !item) || new Set(paths).size !== paths.length) return null; return /** @type {string[]} */ (paths).sort(); }
-/** @param {unknown} value @param {number} [minimum] */
-function callees(value, minimum = 1) { if (!Array.isArray(value) || value.length < minimum || value.length > 64) return null; const items = value.map((item) => text(item, 128)); if (items.some((item) => !item || !/^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*$/.test(/** @type {string} */ (item))) || new Set(items).size !== items.length) return null; return /** @type {string[]} */ (items).sort(); }
-
 /** @param {unknown} value */
 export function validateAuthorizationPolicy(value) {
   /** @type {Array<{id:string,detail:string}>} */ const errors = [];
@@ -56,28 +51,6 @@ export function validateAuthorizationPolicy(value) {
   surfaces.sort((a, b) => a.id.localeCompare(b.id));
   return { valid: true, policy: { version: 1, surfaces }, errors: [] };
 }
-
-/** @param {string} filename */
-function scriptKind(filename) { const extension = path.extname(filename).toLowerCase(); if (extension === ".tsx") return ts.ScriptKind.TSX; if (extension === ".jsx") return ts.ScriptKind.JSX; if (extension === ".js" || extension === ".mjs" || extension === ".cjs") return ts.ScriptKind.JS; return ts.ScriptKind.TS; }
-/** @param {any} expression @returns {string|null} */
-function calleeName(expression) { if (ts.isIdentifier(expression)) return expression.text; if (ts.isPropertyAccessExpression(expression)) { const left = calleeName(expression.expression); return left ? `${left}.${expression.name.text}` : null; } if (ts.isParenthesizedExpression(expression)) return calleeName(expression.expression); return null; }
-/** @param {string} root @param {string} relative */
-function inspectFileCalls(root, relative) {
-  const base = path.resolve(root), absolute = path.resolve(base, relative), rel = path.relative(base, absolute);
-  if (rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) return { ok: false, calls: new Set(), reason: "path-escape" };
-  let stat; try { stat = fs.lstatSync(absolute); } catch { return { ok: false, calls: new Set(), reason: "missing" }; }
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_FILE_BYTES) return { ok: false, calls: new Set(), reason: "uninspectable" };
-  const buffer = fs.readFileSync(absolute); if (buffer.includes(0)) return { ok: false, calls: new Set(), reason: "binary" };
-  const source = ts.createSourceFile(relative, buffer.toString("utf8"), ts.ScriptTarget.Latest, true, scriptKind(relative));
-  const diagnostics = /** @type {any} */ (source).parseDiagnostics ?? [];
-  if (diagnostics.length > 0) return { ok: false, calls: new Set(), reason: "parse-error" };
-  const calls = new Set();
-  /** @param {any} node */
-  function visit(node) { if (ts.isCallExpression(node)) { const name = calleeName(node.expression); if (name) calls.add(name); } ts.forEachChild(node, visit); }
-  visit(source);
-  return { ok: true, calls, reason: null };
-}
-
 /** @param {string} root @param {any} policy @param {any} routeInventory */
 export function inspectAuthorizationPolicy(root, policy, routeInventory) {
   /** @type {Array<any>} */ const checks = [];
