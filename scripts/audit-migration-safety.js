@@ -218,6 +218,11 @@ export function discoverMigrationFiles(root, migrationRoots) {
   return { files, checks };
 }
 
+/** @param {MigrationManifest} manifest */
+export function migrationManifestDigest(manifest) {
+  return sha256(Buffer.from(JSON.stringify({ version: manifest.version, migrations: manifest.migrations }), "utf8"));
+}
+
 /** @param {unknown} value @param {string[]} migrationRoots */
 export function validateMigrationManifest(value, migrationRoots) {
   if (!isPlainObject(value) || value.version !== MANIFEST_VERSION || !Array.isArray(value.migrations)) {

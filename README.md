@@ -323,6 +323,31 @@ The toolkit never assumes that every migration file is applied. Manifest entries
 
 Migration SQL contents are never emitted in JSON or human reports; only file paths, hashes, IDs, classification metadata, and generic risk details are returned. SQL above the bounded static scan size is still hashed but reports `WARN` because its contents were not risk-scanned. `PASS` and `WARN` exit 0; blocking migration findings, invalid inputs, or technical inspection failures exit 1.
 
+### Database schema snapshot and drift audit
+
+`bun run schema:snapshot` validates Database Schema Snapshot v1, a provider-neutral structural PostgreSQL schema document. `bun run audit:schema-drift` compares an explicit expected snapshot with an explicit observed snapshot and optionally verifies that the expected snapshot is bound to the exact applied-migration manifest used by `audit:migration-safety`.
+
+A snapshot records its kind (`expected` or `observed`), database identity, collector trust metadata, and canonical schemas. Structural coverage currently includes tables, columns, constraints, indexes, enums, views, and sequences. Named objects are sorted deterministically; enum value ordering is preserved because it can be semantically relevant. SQL-like definitions are whitespace-normalized only and are not parsed or rewritten by the snapshot contract.
+
+Expected snapshots require `migrationManifestSha256`. The digest is computed from the normalized version 1 applied-history manifest in order, so the expected schema is explicitly bound to a particular migration truth claim. The toolkit never derives an expected schema by pretending to execute arbitrary migration SQL.
+
+```sh
+bun run schema:snapshot --file ./expected-schema.json
+bun run schema:snapshot --file ./observed-schema.json
+
+bun run audit:schema-drift \
+  --expected-file ./expected-schema.json \
+  --observed-file ./observed-schema.json \
+  --migration-manifest ./applied-migrations.json \
+  --migration-root supabase/migrations
+```
+
+The drift report keeps three independent results: database `IDENTITY`, `MIGRATION_BINDING`, and `SCHEMA_DRIFT`. A matching schema without an explicit manifest remains `WARN` because the expected snapshot cannot be proven current against migration truth. A manifest digest mismatch, observed migration digest mismatch, database identity mismatch, or structural schema mismatch is blocking `FAIL`. Snapshot `authenticated` metadata is reported but does not change truth semantics.
+
+Schema drift is object-level. Missing and extra objects are reported by canonical path; changed objects report only the names of changed fields. Raw defaults, constraints, index definitions, view definitions, sequence definitions, or SQL fragments are never copied into drift output, avoiding accidental disclosure of literals or implementation details.
+
+The current core is collector-independent and read only: it reads only explicit JSON snapshots and an optional migration manifest. It performs no database, network, Git, shell, environment, migration execution, or repository-write operation. A matching structure with unverified migration binding exits 0 as `WARN`; structural or binding mismatch exits 1. A separate read-only PostgreSQL catalog collector is the remaining step before schema drift is considered complete for v1.2.
+
 ## Repository status
 
 `bun run audit:repository-status /path/to/repository` combines the existing profiled quality, offline Git-governance, optional production-baseline, optional deployment-verification, and optional CI-verification audits into one read-only scorecard. It composes their canonical results rather than reimplementing their rules or inferring production truth.
