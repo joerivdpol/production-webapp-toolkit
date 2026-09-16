@@ -541,6 +541,178 @@ test("programmatic freshness policy failures remain input errors", () => {
   if (!invalidAge.ok) assert.equal(invalidAge.error.id, "freshness-max-age-invalid");
 });
 
+test("direct commits do not pretend to have runtime identity evidence", () => {
+  const { root, initial } = createRepository();
+  const report = inspectDeploymentVerification(root, {
+    expectedRef: "main",
+    deployedCommit: initial,
+  });
+
+  assert.equal(report.deploymentStatus, "MATCH");
+  assert.equal(report.runtimeIdentity.configured, false);
+  assert.equal(report.runtimeIdentity.status, "NOT_APPLICABLE");
+  assert.equal(report.overallStatus, "PASS");
+});
+
+test("runtime evidence without an identity policy remains backwards compatible", () => {
+  const { root, initial } = createRepository();
+  const result = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: writeEvidenceFile(root, validRuntimeEvidence(initial)),
+  });
+  if (!result.ok) assert.fail(result.error.detail);
+  assert.equal(result.report.deploymentStatus, "MATCH");
+  assert.equal(result.report.runtimeIdentity.configured, false);
+  assert.equal(result.report.runtimeIdentity.status, "NOT_CONFIGURED");
+  assert.equal(result.report.runtimeIdentity.actualName, "synthetic-runtime");
+  assert.equal(result.report.runtimeIdentity.actualEnvironment, "synthetic-environment");
+  assert.equal(result.report.overallStatus, "PASS");
+});
+test("matching runtime name policy preserves deployment PASS and normalizes policy whitespace", () => {
+  const { root, initial } = createRepository();
+  const result = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: writeEvidenceFile(root, validRuntimeEvidence(initial)),
+    expectedRuntimeName: "  synthetic-runtime  ",
+  });
+  if (!result.ok) assert.fail(result.error.detail);
+  assert.equal(result.report.deploymentStatus, "MATCH");
+  assert.equal(result.report.runtimeIdentity.configured, true);
+  assert.equal(result.report.runtimeIdentity.status, "MATCH");
+  assert.equal(result.report.runtimeIdentity.expectedName, "synthetic-runtime");
+  assert.equal(result.report.runtimeIdentity.expectedEnvironment, null);
+  assert.equal(result.report.overallStatus, "PASS");
+  assert.equal(result.report.checks.find((check) => check.id === "runtime-identity")?.severity, "PASS");
+});
+
+test("runtime name mismatch keeps commit MATCH but lowers readiness to WARN", () => {
+  const { root, initial } = createRepository();
+  const result = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: writeEvidenceFile(root, validRuntimeEvidence(initial)),
+    expectedRuntimeName: "other-runtime",
+  });
+  if (!result.ok) assert.fail(result.error.detail);
+  assert.equal(result.report.deploymentStatus, "MATCH");
+  assert.equal(result.report.runtimeIdentity.status, "MISMATCH");
+  assert.equal(result.report.runtimeIdentity.actualName, "synthetic-runtime");
+  assert.equal(result.report.technicalStatus, "PASS");
+  assert.equal(result.report.overallStatus, "WARN");
+  assert.equal(result.report.checks.find((check) => check.id === "runtime-identity")?.severity, "WARN");
+});
+test("runtime environment binding is optional but exact when configured", () => {
+  const { root, initial } = createRepository();
+  const filename = writeEvidenceFile(root, validRuntimeEvidence(initial));
+  const matching = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: filename,
+    expectedRuntimeName: "synthetic-runtime",
+    expectedRuntimeEnvironment: "synthetic-environment",
+  });
+  const mismatching = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: filename,
+    expectedRuntimeName: "synthetic-runtime",
+    expectedRuntimeEnvironment: "other-environment",
+  });
+  if (!matching.ok) assert.fail(matching.error.detail);
+  if (!mismatching.ok) assert.fail(mismatching.error.detail);
+  assert.equal(matching.report.runtimeIdentity.status, "MATCH");
+  assert.equal(matching.report.overallStatus, "PASS");
+  assert.equal(mismatching.report.deploymentStatus, "MATCH");
+  assert.equal(mismatching.report.runtimeIdentity.status, "MISMATCH");
+  assert.equal(mismatching.report.overallStatus, "WARN");
+});
+
+test("expected environment mismatches evidence that omits runtime environment", () => {
+  const { root, initial } = createRepository();
+  const evidence = validRuntimeEvidence(initial);
+  delete evidence.runtime.environment;
+  const result = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: writeEvidenceFile(root, evidence),
+    expectedRuntimeName: "synthetic-runtime",
+    expectedRuntimeEnvironment: "synthetic-environment",
+  });
+  if (!result.ok) assert.fail(result.error.detail);
+  assert.equal(result.report.deploymentStatus, "MATCH");
+  assert.equal(result.report.runtimeIdentity.status, "MISMATCH");
+  assert.equal(result.report.runtimeIdentity.actualEnvironment, null);
+  assert.equal(result.report.overallStatus, "WARN");
+});
+test("runtime identity comparison is exact and case-sensitive", () => {
+  const { root, initial } = createRepository();
+  const result = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: writeEvidenceFile(root, validRuntimeEvidence(initial)),
+    expectedRuntimeName: "Synthetic-runtime",
+  });
+  if (!result.ok) assert.fail(result.error.detail);
+  assert.equal(result.report.deploymentStatus, "MATCH");
+  assert.equal(result.report.runtimeIdentity.status, "MISMATCH");
+  assert.equal(result.report.overallStatus, "WARN");
+});
+
+test("runtime identity CLI policy is explicit and evidence-file only", () => {
+  const { root, initial } = createRepository();
+  const filename = writeEvidenceFile(root, validRuntimeEvidence(initial));
+  const invalidInvocations = [
+    [root, "--expected-ref", "main", "--evidence-file", filename, "--expected-runtime-environment", "synthetic-environment"],
+    [root, "--expected-ref", "main", "--deployed-commit", initial, "--expected-runtime-name", "synthetic-runtime"],
+    [root, "--expected-ref", "main", "--evidence-file", filename, "--expected-runtime-name", "   "],
+    [root, "--expected-ref", "main", "--evidence-file", filename, "--expected-runtime-name", "synthetic-runtime", "--expected-runtime-environment", "   "],
+  ];
+  for (const args of invalidInvocations) assert.equal(runCli(...args).status, 1);
+
+  const valid = runCli(
+    root,
+    "--expected-ref", "main",
+    "--evidence-file", filename,
+    "--expected-runtime-name", "synthetic-runtime",
+    "--expected-runtime-environment", "synthetic-environment",
+    "--json",
+  );
+  assert.equal(valid.status, 0);
+  const report = JSON.parse(valid.stdout);
+  assert.equal(report.runtimeIdentity.status, "MATCH");
+  assert.equal(report.deploymentStatus, "MATCH");
+});
+test("freshness and runtime identity policies compose without changing commit truth", () => {
+  const { root, initial } = createRepository();
+  const result = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: writeEvidenceFile(root, validRuntimeEvidence(initial)),
+    maxEvidenceAgeSeconds: 3600,
+    evaluatedAt: "2026-09-01T13:00:00Z",
+    expectedRuntimeName: "synthetic-runtime",
+    expectedRuntimeEnvironment: "synthetic-environment",
+  });
+  if (!result.ok) assert.fail(result.error.detail);
+  assert.equal(result.report.deploymentStatus, "MATCH");
+  assert.equal(result.report.freshness.status, "FRESH");
+  assert.equal(result.report.runtimeIdentity.status, "MATCH");
+  assert.equal(result.report.overallStatus, "PASS");
+});
+
+test("programmatic runtime identity policy failures remain input errors", () => {
+  const { root, initial } = createRepository();
+  const filename = writeEvidenceFile(root, validRuntimeEvidence(initial));
+  const missingName = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: filename,
+    expectedRuntimeEnvironment: "synthetic-environment",
+  });
+  const invalidName = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: filename,
+    expectedRuntimeName: "   ",
+  });
+  assert.equal(missingName.ok, false);
+  assert.equal(invalidName.ok, false);
+  if (!missingName.ok) assert.equal(missingName.error.id, "runtime-identity-name-missing");
+  if (!invalidName.ok) assert.equal(invalidName.error.id, "runtime-identity-name-invalid");
+});
+
 test("keeps invalid in-process deployed evidence unverified", () => {
   const invalidValues = ["HEAD", "abc123", "HEAD~1"];
 
@@ -654,7 +826,7 @@ test("JSON and human output expose the stable deployment and trust contract", ()
   const human = formatDeploymentVerification(
     inspectDeploymentVerification(root, { expectedRef: "main", deployedCommit: initial }),
   );
-  for (const label of ["Expected baseline", "Deployed commit", "Evidence freshness", "Deployment status", "Technical", "Overall"]) {
+  for (const label of ["Expected baseline", "Deployed commit", "Evidence freshness", "Runtime identity", "Deployment status", "Technical", "Overall"]) {
     assert.match(human, new RegExp(label));
   }
 });
