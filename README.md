@@ -1009,3 +1009,34 @@ bun run audit:ownership --root . --policy /private/path/ownership-policy.json
 ```
 
 The audit uses local `git ls-files` only to enumerate tracked paths and never mutates Git or repository content. It does not authenticate whether a named GitHub user or team exists, is visible, or has write access, so owner access remains explicitly `UNVERIFIED`; provider-side access verification belongs in a separate authenticated collector. It also does not claim that CODEOWNERS review is enforced by branch protection. The existing GitHub protection audit remains the source for that separate policy dimension.
+
+### Runtime collector adapter
+
+`bun run runtime:collector:adapt` is the shared adapter boundary for runtime evidence collectors. A collector first emits Runtime Collector Observation v1 with an explicit collector kind, source, authentication claim, collection timestamp, runtime label, and full deployment commit. The adapter normalizes that observation and emits canonical Runtime Evidence Contract v1 through the existing validator rather than letting every collector invent a parallel evidence format.
+
+Collector kinds are deliberately finite: `checkout`, `application`, `container`, and `process`. The resulting Runtime Evidence metadata records both collector kind and identity scope. Checkout collection is explicitly labeled `checkout` and is not silently upgraded to process identity. Application supplied identity becomes `application-reported`, while container and process collectors remain separately labeled.
+
+```json
+{
+  "version": 1,
+  "collector": {
+    "kind": "checkout",
+    "source": "local-git-checkout",
+    "authenticated": false,
+    "collectedAt": "2026-09-17T01:00:00+07:00"
+  },
+  "runtime": {
+    "name": "example-checkout",
+    "environment": "development"
+  },
+  "deployment": {
+    "commit": "0123456789abcdef0123456789abcdef01234567"
+  }
+}
+```
+
+```sh
+bun run runtime:collector:adapt --file ./collector-observation.json --json
+```
+
+The adapter is offline and read only. It does not collect anything by itself, generate collection timestamps, inspect environment variables, authenticate provider claims, or accept arbitrary collector metadata. Specific collectors remain separate adapters with narrowly bounded operational surfaces. The adapter only provides common normalization and identity-scope semantics before evidence enters deployment and runtime reporting.

@@ -70,8 +70,8 @@ Core principles:
 * Provider-neutral Orphan Evidence v1, local TypeScript/JSON static collector, and explicit dead-code/orphan policy audit covering exports, routes, feature flags, translations, and handlers: merged.
 * Repository Hygiene Policy v1 with stale configuration, duplicate configuration, generated artifact, duplicate workflow, and oversized tracked-file checks: merged.
 * Documentation Drift Policy v1 with package command, environment contract, repository path, and generated-document source binding checks: merged.
-* CODEOWNERS Ownership Policy v1 with GitHub-compatible location precedence, syntax checks, last-match assignment, and explicit critical-path owner requirements: implementation complete on the active capability branch.
-* v1.2 production-readiness capabilities are complete; runtime-assurance capabilities remain open.
+* CODEOWNERS Ownership Policy v1 with GitHub-compatible location precedence, syntax checks, last-match assignment, and explicit critical-path owner requirements: merged.
+* v1.2 production-readiness capabilities are complete.
 
 10. Add CI evidence for the exact commit being evaluated, including tests, typecheck, lint, and build outcomes.
 11. Add read only GitHub branch protection and ruleset auditing.
@@ -100,6 +100,11 @@ Core principles:
 34. Add CODEOWNERS and ownership policy checks for critical paths.
 
 ## v1.3 Runtime assurance
+
+### Current v1.3 progress
+
+* Runtime Collector Observation v1 and shared adapter to canonical Runtime Evidence Contract v1 with explicit checkout, application-reported, container, and process identity scopes: implementation complete on the active capability branch.
+* Concrete checkout, application, container, process, health, synthetic, frontend, and operational assurance collectors remain open.
 
 35. Add runtime evidence collectors as separate adapters that emit Runtime Evidence Contract documents.
 36. Support local Git checkout evidence while clearly labeling it as checkout evidence, not process identity.
