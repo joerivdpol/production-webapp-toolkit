@@ -93,7 +93,8 @@
     "runtime:seo": "node scripts/run-seo-production-checks.js",
     "audit:localization": "node scripts/audit-localization-completeness.js",
     "route:inventory": "node scripts/route-inventory.js",
-    "audit:route-coverage": "node scripts/audit-route-coverage.js"
+    "audit:route-coverage": "node scripts/audit-route-coverage.js",
+    "audit:authorization": "node scripts/audit-authorization-policy.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
