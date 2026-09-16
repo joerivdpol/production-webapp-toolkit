@@ -52,7 +52,7 @@ Core principles:
 * Client environment exposure and unsafe public naming audit: merged.
 * Public safety expansion for credentials, frontend artifacts, and CI leakage: merged.
 * Database migration safety audit: merged.
-* Database Schema Snapshot v1 and schema drift comparator: implementation in progress; read-only observed PostgreSQL catalog collection remains.
+* Database Schema Snapshot v1, schema drift comparator, and read-only PostgreSQL observed catalog collector: implementation complete; merge pending.
 * PostgreSQL/Supabase security policy checks and the remaining production-readiness capabilities remain open.
 
 10. Add CI evidence for the exact commit being evaluated, including tests, typecheck, lint, and build outcomes.

@@ -346,7 +346,22 @@ The drift report keeps three independent results: database `IDENTITY`, `MIGRATIO
 
 Schema drift is object-level. Missing and extra objects are reported by canonical path; changed objects report only the names of changed fields. Raw defaults, constraints, index definitions, view definitions, sequence definitions, or SQL fragments are never copied into drift output, avoiding accidental disclosure of literals or implementation details.
 
-The current core is collector-independent and read only: it reads only explicit JSON snapshots and an optional migration manifest. It performs no database, network, Git, shell, environment, migration execution, or repository-write operation. A matching structure with unverified migration binding exits 0 as `WARN`; structural or binding mismatch exits 1. A separate read-only PostgreSQL catalog collector is the remaining step before schema drift is considered complete for v1.2.
+The drift comparator remains collector-independent and read only: it reads only explicit JSON snapshots and an optional migration manifest. It performs no database, network, Git, shell, environment, migration execution, or repository-write operation. A matching structure with unverified migration binding exits 0 as `WARN`; structural or binding mismatch exits 1.
+
+A separate read-only PostgreSQL collector can create an observed snapshot through an explicit libpq service:
+
+```sh
+bun run schema:snapshot:postgres:collect \
+  --service production-audit \
+  --identity-name primary-database \
+  --environment production \
+  --schema public \
+  --json > observed-schema.json
+```
+
+The collector requires an explicit service name, database identity, and at least one explicit PostgreSQL schema. It never accepts a password, host, username, connection URL, or arbitrary SQL argument. Authentication and connection details remain in the existing libpq service/psql context. Collection runs one generated catalog query beginning with `BEGIN READ ONLY`, uses only PostgreSQL catalog reads, and emits Database Schema Snapshot v1 after canonical validation. Provider stderr and connection errors are reduced to generic failure messages. The collector itself writes no files; shell redirection in the example is the caller-controlled output step.
+
+Observed collection covers tables, columns, constraints, indexes, enums, views, materialized views, and sequences. It does not automatically discover all schemas and it does not claim migration truth. Migration binding remains a separate explicit manifest comparison. The catalog query and adapter are regression-tested offline and have also been validated against a temporary PostgreSQL 17 instance with synthetic schema objects.
 
 ## Repository status
 
