@@ -841,3 +841,39 @@ test("the deployment layer reuses the canonical validator and adds no runtime or
     assert.equal(source.includes(forbidden), false, `forbidden ${forbidden} surface`);
   }
 });
+
+test("checkout scoped runtime evidence keeps commit comparison but warns that runtime identity is not established", () => {
+  const { root, initial } = createRepository();
+  const evidence = validRuntimeEvidence(initial);
+  evidence.metadata = { collector: { kind: "checkout", identityScope: "checkout" } };
+  const result = runCli(root, "--expected-ref", "main", "--evidence-file", writeEvidenceFile(root, evidence), "--json");
+
+  assert.equal(result.status, 0);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.deploymentStatus, "MATCH");
+  assert.equal(report.overallStatus, "WARN");
+  assert.deepEqual(report.evidence.collector, { kind: "checkout", identityScope: "checkout" });
+  assert.equal(report.checks.find((/** @type {any} */ check) => check.id === "evidence-identity-scope")?.severity, "WARN");
+  assert.match(report.checks.find((/** @type {any} */ check) => check.id === "evidence-identity-scope")?.detail ?? "", /local checkout only/);
+
+  const fileResult = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: writeEvidenceFile(root, evidence),
+  });
+  assert.equal(fileResult.ok, true);
+  if (fileResult.ok) assert.match(formatDeploymentVerification(fileResult.report), /identity scope: checkout/);
+});
+
+test("application collector scope stays visible without becoming authentication proof", () => {
+  const { root, initial } = createRepository();
+  const evidence = validRuntimeEvidence(initial);
+  evidence.metadata = { collector: { kind: "application", identityScope: "application-reported" } };
+  const result = runCli(root, "--expected-ref", "main", "--evidence-file", writeEvidenceFile(root, evidence), "--json");
+
+  assert.equal(result.status, 0);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.deploymentStatus, "MATCH");
+  assert.equal(report.overallStatus, "PASS");
+  assert.deepEqual(report.evidence.collector, { kind: "application", identityScope: "application-reported" });
+  assert.equal(report.checks.find((/** @type {any} */ check) => check.id === "evidence-identity-scope")?.severity, "PASS");
+});
