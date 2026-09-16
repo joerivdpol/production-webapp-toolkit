@@ -581,8 +581,11 @@ Compatibility is directional. A candidate request contract must continue accepti
 
 Adding an operation is compatible. Adding another response status/media contract is reported as `WARN` because existing clients may not have modeled that outcome even though no baseline response was removed. Evidence authentication metadata remains trust metadata and never changes compatibility truth. The comparator reads only explicit JSON files and performs no network, Git, environment, command, or repository write operation.
 
+`bun run api:contract:openapi` converts an explicit OpenAPI 3.0, 3.1, or 3.2 JSON document into the same canonical snapshot. The adapter deliberately supports only the schema subset represented by API Contract Snapshot v1. Local component schema references are resolved with bounded recursion; external references, polymorphic schema keywords, schema-valued `additionalProperties`, request bodies with multiple media types, response ranges, callbacks, and security requirements fail closed instead of being silently discarded. Evidence source, collection time, service identity, snapshot kind, and authentication state are caller supplied; the adapter never generates trust metadata. A bodyless OpenAPI response is represented with media type `none` and a null schema so status-only response contracts remain visible.
+
 ```sh
 bun run api:contract --file ./baseline-api.json
 bun run api:contract --file ./candidate-api.json
+bun run api:contract:openapi --file ./openapi.json --kind candidate --service example-api --source local-openapi --collected-at 2026-09-16T13:45:00Z --json
 bun run audit:api-contract --baseline-file ./baseline-api.json --candidate-file ./candidate-api.json
 ```
