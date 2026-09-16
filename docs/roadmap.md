@@ -48,8 +48,9 @@ Core principles:
 * GitHub Actions CI Evidence adapter: merged.
 * Authenticated read-only GitHub Actions CI Evidence collector: merged.
 * Read-only GitHub branch protection and ruleset audit: merged.
-* Environment Contract v1 audit: implementation in progress.
-* Client exposure, public safety expansion, and the remaining production-readiness capabilities remain open.
+* Environment Contract v1 audit: merged.
+* Client environment exposure and unsafe public naming audit: implementation in progress.
+* Public safety expansion and the remaining production-readiness capabilities remain open.
 
 10. Add CI evidence for the exact commit being evaluated, including tests, typecheck, lint, and build outcomes.
 11. Add read only GitHub branch protection and ruleset auditing.

@@ -182,7 +182,7 @@ function extractReferences(text, relativeFile) {
 }
 
 /** @param {string} root @param {string[]} scanRoots */
-function scanSource(root, scanRoots) {
+export function scanEnvironmentSource(root, scanRoots) {
   /** @type {Map<string, EnvironmentReference[]>} */
   const references = new Map();
   /** @type {{ file: string, line: number, accessor: string }[]} */
@@ -255,7 +255,7 @@ export function inspectEnvironmentContract(root, contract) {
   let source;
   let examples;
   try {
-    source = scanSource(repository, contract.scanRoots);
+    source = scanEnvironmentSource(repository, contract.scanRoots);
     examples = scanExamples(repository, contract.exampleFiles);
   } catch {
     return { technicalStatus: "FAIL", overallStatus: "FAIL", root: repository, contract, checks: [{ id: "inspection-failed", severity: "FAIL", detail: "environment contract inspection could not read the declared repository inputs" }], variables: [], unknownReferences: [], dynamicAccess: [], filesScanned: 0 };
@@ -343,7 +343,7 @@ export function parseArguments(argv) {
 }
 
 /** @param {string} filename @returns {{ ok: true, contract: EnvironmentContract } | { ok: false, error: { id: string, detail: string } }} */
-function readContractFile(filename) {
+export function readEnvironmentContractFile(filename) {
   let value;
   try { value = JSON.parse(fs.readFileSync(filename, "utf8")); }
   catch (error) { return { ok: false, error: { id: error instanceof SyntaxError ? "contract-json-invalid" : "contract-file-unreadable", detail: error instanceof SyntaxError ? "environment contract contains invalid JSON" : "environment contract file cannot be read" } }; }
@@ -358,7 +358,7 @@ export function main(argv = process.argv.slice(2)) {
     console.error("Usage: node scripts/audit-environment-contract.js [repository] --contract <environment-contract.json> [--json]");
     return 1;
   }
-  const loaded = readContractFile(options.contractFile);
+  const loaded = readEnvironmentContractFile(options.contractFile);
   if (!loaded.ok) { console.error(loaded.error.detail); return 1; }
   const report = inspectEnvironmentContract(options.target ?? process.cwd(), loaded.contract);
   console.log(options.json ? JSON.stringify(report) : formatEnvironmentContract(report));

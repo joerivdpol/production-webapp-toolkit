@@ -40,7 +40,8 @@
     "ci:evidence:github-actions": "node scripts/github-actions-ci-evidence.js",
     "ci:evidence:github-actions:collect": "node scripts/collect-github-actions-ci-evidence.js",
     "audit:github-protection": "node scripts/audit-github-protection.js",
-    "audit:env-contract": "node scripts/audit-environment-contract.js"
+    "audit:env-contract": "node scripts/audit-environment-contract.js",
+    "audit:env-exposure": "node scripts/audit-client-env-exposure.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
