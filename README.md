@@ -1250,3 +1250,45 @@ bun run runtime:collector:adapt --file ./collector-observation.json --json
 ```
 
 The adapter is offline and read only. It does not collect anything by itself, generate collection timestamps, inspect environment variables, authenticate provider claims, or accept arbitrary collector metadata. Specific collectors remain separate adapters with narrowly bounded operational surfaces. The adapter only provides common normalization and identity-scope semantics before evidence enters deployment and runtime reporting.
+
+### SEO production checks
+
+`bun run runtime:seo` performs explicit read-only SEO checks against configured public routes. Each route can require status codes, bounded title and meta-description lengths, an exact canonical URL, absence of accidental `noindex`, required hreflang entries, required JSON-LD `@type` values, and bounded same-origin internal-link health. The report stores only normalized findings and link counts; HTML, response bodies, JSON-LD payloads, page text, and provider traces are not retained.
+
+An optional site policy checks `robots.txt`, verifies the configured sitemap declaration, traverses bounded same-origin sitemap indexes, and confirms configured routes are present when required. Sitemap traversal is limited by `maxSitemaps`; auxiliary requests do not follow redirects and response bodies are bounded to 1 MiB. Malformed or unavailable sitemap evidence fails closed rather than being treated as proof that routes are indexed.
+
+The browser boundary matches other runtime gates: public HTTP is rejected except for loopback testing, URL credentials are forbidden, service workers are blocked, no credentials are configured, only `GET`, `HEAD`, and `OPTIONS` are permitted, page-initiated mutation methods are aborted, and cross-origin navigation is blocked. A blocked mutation attempt is itself a failing SEO finding.
+
+```json
+{
+  "version": 1,
+  "suite": "public-seo",
+  "site": {
+    "robotsUrl": "https://example.com/robots.txt",
+    "sitemapUrl": "https://example.com/sitemap.xml",
+    "requireSitemapDeclaration": true,
+    "requireRoutesInSitemap": true,
+    "maxSitemaps": 8,
+    "timeoutMs": 5000
+  },
+  "routes": [{
+    "id": "homepage",
+    "url": "https://example.com/",
+    "expectedStatuses": [200],
+    "timeoutMs": 5000,    "title": { "required": true, "minLength": 3, "maxLength": 70 },
+    "description": { "required": true, "minLength": 10, "maxLength": 180 },
+    "expectedCanonical": "https://example.com/",
+    "allowNoindex": false,
+    "requiredHreflang": ["en", "nl"],
+    "requiredStructuredDataTypes": ["WebSite"],
+    "checkInternalLinks": true,
+    "maxInternalLinks": 100
+  }]
+}
+```
+
+```sh
+bun run runtime:seo -- --policy /private/path/seo-policy.json --json
+```
+
+This gate checks the configured technical SEO surface only. It does not claim search-engine indexing, ranking, content quality, semantic correctness of structured data beyond required type presence, or completeness of every crawler-specific behavior.
