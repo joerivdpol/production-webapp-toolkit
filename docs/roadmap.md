@@ -114,7 +114,8 @@ Core principles:
 * Provider-neutral Performance Evidence v1 with exact commit/freshness binding and explicit bundle, LCP, CLS, and INP budget audit: merged.
 * Browser-based axe-core accessibility gates for explicitly configured critical routes with bounded impact thresholds and non-destructive request controls: merged.
 * Browser-based SEO production checks for metadata, canonical URLs, robots, sitemap membership, hreflang, JSON-LD types, noindex and bounded internal-link health: merged.
-* Localization completeness and the remaining operational assurance capabilities remain open.
+* Static localization completeness audit for catalog key parity, placeholder parity, bounded exact-reference fallback leakage, HTML policy, and explicit currency-formatting rules: implementation complete on the active capability branch.
+* Route inventory and the remaining operational assurance capabilities remain open.
 
 35. Add runtime evidence collectors as separate adapters that emit Runtime Evidence Contract documents.
 36. Support local Git checkout evidence while clearly labeling it as checkout evidence, not process identity.
