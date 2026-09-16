@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 
 import { isAbsoluteIsoTimestamp } from "./runtime-evidence.js";
 
-const METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
+const HTTP_METHOD_PATTERN = /^[A-Z][A-Z0-9!#$%&'*+.^_`|~-]*$/;
 const PARAMETER_LOCATIONS = new Set(["path", "query", "header"]);
 const PRIMITIVE_TYPES = new Set(["string", "number", "integer", "boolean"]);
 
@@ -187,7 +187,7 @@ function normalizeOperations(value, errors) {
     rejectUnknown(raw, ["method", "path", "parameters", "body", "responses"], "operation", errors);
     const method = nonEmptyString(raw.method)?.toUpperCase() ?? null;
     const operationPath = nonEmptyString(raw.path);
-    if (!method || !METHODS.has(method) || !operationPath || !operationPath.startsWith("/")) {
+    if (!method || !HTTP_METHOD_PATTERN.test(method) || !operationPath || !operationPath.startsWith("/")) {
       errors.push({ id: "operation-fields-invalid", detail: `operations[${index}] has invalid method or path` });
       continue;
     }
