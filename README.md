@@ -126,6 +126,51 @@ Schema validity is not proof that the evidence is authenticated, and `authentica
 
 The command is offline and read only. It reads only the explicitly supplied evidence JSON file, never changes that file, and performs no Git inspection or command, network, SSH, systemd, Docker, HTTP, runtime probe, environment-variable or `.env` read, baseline inspection, or timestamp generation. It does not collect evidence automatically.
 
+## CI evidence and verification
+
+`bun run ci:evidence --file ./ci-evidence.json` validates CI Evidence Contract v1. The contract represents evidence for one exact Git object ID and contains explicit CI provider metadata, collector-supplied trust metadata, and a non-empty set of uniquely named check results. It is provider-neutral: a future GitHub Actions, GitLab, or other collector can emit the same contract without changing verification semantics.
+
+```json
+{
+  "version": 1,
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "ci": {
+    "provider": "github-actions",
+    "workflow": "CI",
+    "runId": "12345"
+  },
+  "evidence": {
+    "source": "github-api",
+    "authenticated": false,
+    "collectedAt": "2026-09-16T05:00:00Z"
+  },
+  "checks": [
+    { "name": "typecheck", "status": "PASS" },
+    { "name": "test", "status": "PASS" },
+    { "name": "lint", "status": "PASS" },
+    { "name": "build", "status": "PASS" }
+  ]
+}
+```
+
+The commit must be a full 40-character SHA-1 or 64-character SHA-256 object ID and is normalized to lowercase. `ci.provider`, `evidence.source`, and each check name are required non-empty strings. `ci.workflow` and `ci.runId` are optional metadata. `evidence.authenticated` is a boolean trust claim supplied by the collector; it does not change verification truth. `evidence.collectedAt` uses the same absolute ISO 8601 timestamp validator as Runtime Evidence. Check names are trimmed, unique, exact, and case-sensitive. A check status is exactly `PASS`, `FAIL`, or `SKIPPED`. Unknown version-1 fields are rejected.
+
+Use the separate verifier to compare validated CI evidence with an explicit expected commit and explicit required checks:
+
+```sh
+bun run audit:ci \
+  --evidence-file ./ci-evidence.json \
+  --expected-commit 0123456789abcdef0123456789abcdef01234567 \
+  --require-check typecheck \
+  --require-check test \
+  --require-check lint \
+  --require-check build
+```
+
+Verification keeps commit truth and check truth separate. An exact commit with every required check `PASS` is overall `PASS`. A commit mismatch is `WARN` when the required checks otherwise pass. A required check that explicitly reports `FAIL` is blocking overall `FAIL`. A required check that is `SKIPPED` or absent from the evidence is `UNVERIFIED` and produces overall `WARN`. Failed or skipped checks that were not explicitly required do not affect the verification result. Invalid evidence or an invalid verification policy is an input failure rather than a CI status result. `FAIL` verification exits 1; `PASS` and `WARN` verification exit 0.
+
+Both commands are offline and read only. They read only the explicitly supplied evidence file, run no Git command, make no network request, read no environment variables, and write no files. CI Evidence Contract validity does not prove that the source is authenticated or that a provider actually produced the document. Collection and provider authentication are separate future adapters.
+
 ## Repository status
 
 `bun run audit:repository-status /path/to/repository` combines the existing profiled quality, offline Git-governance, optional production-baseline, and optional deployment-verification audits into one read-only scorecard. It composes their canonical results rather than reimplementing their rules or inferring production truth.

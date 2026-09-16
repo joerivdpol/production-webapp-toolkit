@@ -5,7 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { inspectProductionBaseline } from "./audit-production-baseline.js";
-import { isAbsoluteIsoTimestamp, validateRuntimeEvidence } from "./runtime-evidence.js";
+import { isAbsoluteIsoTimestamp, isFullObjectId as isCanonicalFullObjectId, validateRuntimeEvidence } from "./runtime-evidence.js";
 
 /** @typedef {"PASS" | "WARN" | "FAIL"} Severity */
 /** @typedef {"FRESH" | "STALE" | "FUTURE" | "NOT_CONFIGURED" | "NOT_APPLICABLE"} FreshnessStatus */
@@ -44,7 +44,7 @@ import { isAbsoluteIsoTimestamp, validateRuntimeEvidence } from "./runtime-evide
 
 /** @param {string} value */
 export function isFullObjectId(value) {
-  return /^[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?$/.test(value);
+  return isCanonicalFullObjectId(value);
 }
 
 /** @param {DeploymentEvidence} evidence */
