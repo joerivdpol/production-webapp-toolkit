@@ -125,11 +125,11 @@ test("client files are observational and missing client evidence cannot be treat
 });
 
 test("human report exposes structural findings without source payloads", () => {
-  const secret = "UNIQUE_AUTH_SOURCE_PAYLOAD_451";
-  const root = repository({ admin: `export function loader() { const secret = "${secret}"; return loadUsers(); }\n` });
+  const payloadMarker = "UNIQUE_AUTH_SOURCE_PAYLOAD_451";
+  const root = repository({ admin: `export function loader() { const marker = "${payloadMarker}"; return loadUsers(); }\n` });
   const output = formatAuthorizationPolicy(inspectAuthorizationPolicy(root, policy(), inventory()));
   assert.match(output, /authorization-guard-missing/);
-  assert.doesNotMatch(output, new RegExp(secret));
+  assert.doesNotMatch(output, new RegExp(payloadMarker));
   fs.rmSync(root, { recursive: true, force: true });
 });
 
