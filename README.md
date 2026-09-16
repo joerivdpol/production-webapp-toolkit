@@ -1093,6 +1093,34 @@ bun run audit:runtime-health -- \
 
 Authentication metadata is reported but never changes health truth. The health audit is offline and read only, and its report explicitly states `Deployment identity: NOT EVALUATED`; deployment identity and health can therefore disagree without either dimension overwriting the other.
 
+### Synthetic production smoke tests
+
+`bun run runtime:smoke` executes an explicit version 1 smoke policy against live endpoints while enforcing a narrow request-side safety boundary. Probes may use only `GET` or `HEAD`, redirects are never followed, request bodies are never sent, caller-supplied headers and credentials are not accepted, URLs with user information, query strings, or fragments are rejected, and plaintext HTTP is restricted to loopback hosts for local verification. Public production probes therefore require HTTPS.
+
+Each probe declares its exact URL, expected HTTP status set, timeout, and optional bounded response assertion. `status-only` checks inspect only the response status. `json-object` checks may require top-level JSON keys, but response bodies are capped at 64 KiB and values are never copied into the report. A `HEAD` probe cannot request a JSON body. Network failures, unexpected statuses, malformed JSON, oversized responses, and missing required keys are blocking smoke failures.
+
+```json
+{
+  "version": 1,
+  "suite": "production-core",
+  "probes": [
+    {
+      "id": "homepage",
+      "url": "https://example.com/",
+      "method": "GET",
+      "expectedStatuses": [200],
+      "timeoutMs": 5000
+    }
+  ]
+}
+```
+
+```sh
+bun run runtime:smoke -- --policy /private/path/production-smoke-policy.json --json
+```
+
+The toolkit can enforce what it sends, but it cannot prove that a remote server implements `GET` or `HEAD` without side effects. Smoke policies must therefore target endpoints that the application owner has explicitly designated safe for read-only production observation. The runner performs no login, booking, payment, mutation, shell command, environment inspection, or redirect traversal.
+
 ```json
 {
   "version": 1,
