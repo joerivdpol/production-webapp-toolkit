@@ -201,6 +201,25 @@ The collector requires an explicit `owner/repository` and explicit numeric workf
 
 Because this component is the collector, it records the actual collection time after the API payloads have been obtained. Its evidence source is `github-cli-api` and `authenticated: true` means only that `gh auth status` succeeded before the GET requests. That remains trust metadata rather than cryptographic proof. The collected document is still validated by the same offline GitHub Actions adapter and CI Evidence Contract before it is returned.
 
+### GitHub branch protection and ruleset audit
+
+`bun run audit:github-protection` is an optional read-only online audit for explicit GitHub branch-protection policy. It requires an already authenticated GitHub CLI session plus an explicit repository, branch, and versioned policy file:
+
+```sh
+bun run audit:github-protection \
+  --repository owner/repository \
+  --branch main \
+  --policy ./github-protection-policy.json
+```
+
+Policy version 1 only checks requirements that are explicitly enabled. Supported requirements include named required status checks, strict status checking, pull-request enforcement, minimum approvals, stale-review dismissal, code-owner review, latest-push approval, conversation resolution, linear history, administrator enforcement, blocked force pushes, and blocked branch deletion. The public toolkit contains the policy engine; project- or organization-specific policies can remain private.
+
+The audit reads three explicit GitHub views through authenticated `gh api --method GET`: branch metadata, classic branch protection, and the effective active rules returned for the selected branch. Classic branch protection and rulesets are additive GitHub mechanisms, so the audit combines their known restrictions instead of choosing one as canonical. When overlapping known protections exist, the effective report preserves the stricter requirement, such as the larger minimum approval count or the union of required status checks.
+
+Source availability is part of the result. A known absent requirement is `FAIL`. When an API source cannot be inspected reliably, a requirement that is not otherwise established is `UNVERIFIED`, producing overall `WARN` rather than falsely declaring the branch unprotected. A requirement already established by another available source remains `PASS`. Administrator enforcement is only asserted from classic protection because a ruleset can contain bypass actors that are not represented by the active-rule response used here.
+
+The audit never changes repository settings, rulesets, branches, reviews, or checks. It performs no POST, PUT, PATCH, DELETE, Git mutation, or token output. Policy failure exits 1, technical provider/input failure exits 1, and fully verified PASS exits 0; `UNVERIFIED` policy results remain WARN and exit 0.
+
 ## Repository status
 
 `bun run audit:repository-status /path/to/repository` combines the existing profiled quality, offline Git-governance, optional production-baseline, optional deployment-verification, and optional CI-verification audits into one read-only scorecard. It composes their canonical results rather than reimplementing their rules or inferring production truth.
