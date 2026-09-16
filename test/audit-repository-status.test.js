@@ -560,6 +560,92 @@ test("repository status freshness policy is explicit and evidence-file only", ()
   }), /requires Runtime Evidence file/);
 });
 
+test("repository status preserves matching runtime identity as full PASS", () => {
+  const { root, initial } = createWebapp();
+  assert.ok(initial);
+  const file = writeEvidenceFile(runtimeEvidence(initial));
+  const report = inspectRepositoryStatus(root, {
+    expectedRef: "main",
+    evidenceFile: file,
+    expectedRuntimeName: "runtime-a",
+    expectedRuntimeEnvironment: "example-production",
+  });
+
+  assert.equal(report.dimensions.deployment.deploymentStatus, "MATCH");
+  assert.equal(report.dimensions.deployment.runtimeIdentity?.status, "MATCH");
+  assert.equal(report.dimensions.deployment.status, "PASS");
+  assert.equal(report.overallStatus, "PASS");
+  assert.match(formatRepositoryStatus(report), /DEPLOYMENT\s+PASS \(MATCH; IDENTITY_MATCH\)/);
+});
+
+test("runtime identity mismatch keeps commit MATCH but warns repository readiness", () => {
+  const { root, initial } = createWebapp();
+  assert.ok(initial);
+  const file = writeEvidenceFile(runtimeEvidence(initial));
+  const report = inspectRepositoryStatus(root, {
+    expectedRef: "main",
+    evidenceFile: file,
+    expectedRuntimeName: "other-runtime",
+  });
+
+  assert.equal(report.dimensions.deployment.deploymentStatus, "MATCH");
+  assert.equal(report.dimensions.deployment.runtimeIdentity?.status, "MISMATCH");
+  assert.equal(report.dimensions.deployment.status, "WARN");
+  assert.equal(report.technicalStatus, "PASS");
+  assert.equal(report.overallStatus, "WARN");
+  assert.match(formatRepositoryStatus(report), /DEPLOYMENT\s+WARN \(MATCH; IDENTITY_MISMATCH\)/);
+});
+test("repository runtime identity policy is explicit and evidence-file only", () => {
+  const { root, initial } = createWebapp();
+  assert.ok(initial);
+  const file = writeEvidenceFile(runtimeEvidence(initial));
+  const invalidCliInputs = [
+    [root, "--expected-ref", "main", "--evidence-file", file, "--expected-runtime-environment", "example-production"],
+    [root, "--expected-ref", "main", "--deployed-commit", initial, "--expected-runtime-name", "runtime-a"],
+    [root, "--expected-ref", "main", "--evidence-file", file, "--expected-runtime-name", "   "],
+  ];
+  for (const args of invalidCliInputs) assert.equal(runCli(...args).status, 1);
+
+  const valid = runCli(
+    root,
+    "--expected-ref", "main",
+    "--evidence-file", file,
+    "--expected-runtime-name", "runtime-a",
+    "--expected-runtime-environment", "example-production",
+    "--json",
+  );
+  assert.equal(valid.status, 0);
+  assert.equal(JSON.parse(valid.stdout).dimensions.deployment.runtimeIdentity?.status, "MATCH");
+
+  assert.throws(() => inspectRepositoryStatus(root, {
+    expectedRef: "main",
+    evidenceFile: file,
+    expectedRuntimeEnvironment: "example-production",
+  }), /requires expectedRuntimeName/);
+  assert.throws(() => inspectRepositoryStatus(root, {
+    expectedRef: "main",
+    deployedCommit: initial,
+    expectedRuntimeName: "runtime-a",
+  }), /requires Runtime Evidence file/);
+});
+
+test("freshness and runtime identity compose in repository status", () => {
+  const { root, initial } = createWebapp();
+  assert.ok(initial);
+  const report = inspectRepositoryStatus(root, {
+    expectedRef: "main",
+    evidenceFile: writeEvidenceFile(runtimeEvidence(initial)),
+    maxEvidenceAgeSeconds: 3600,
+    evaluatedAt: "2026-09-03T01:00:00Z",
+    expectedRuntimeName: "runtime-a",
+    expectedRuntimeEnvironment: "example-production",
+  });
+  assert.equal(report.dimensions.deployment.freshness?.status, "FRESH");
+  assert.equal(report.dimensions.deployment.runtimeIdentity?.status, "MATCH");
+  assert.equal(report.overallStatus, "PASS");
+  assert.match(formatRepositoryStatus(report), /MATCH; FRESH; IDENTITY_MATCH/);
+});
+
 test("configured deployment technical failure propagates to repository technical failure", () => {
   const { root } = createWebapp({ git: false });
   const fullCommit = "0123456789abcdef0123456789abcdef01234567";
@@ -579,6 +665,7 @@ test("repository status delegates deployment validation and comparison to canoni
   assert.match(source, /inspectDeploymentVerificationFromEvidenceFile/);
   assert.match(source, /isFullObjectId/);
   assert.match(source, /validateEvidenceFreshnessPolicy/);
+  assert.match(source, /validateRuntimeIdentityPolicy/);
   assert.doesNotMatch(source, /validateRuntimeEvidence/);
   assert.doesNotMatch(source, /[0-9a-fA-F]\{40\}/);
   assert.doesNotMatch(source, /spawnSync|execFileSync|fetch\(|https?:|ssh|systemctl|docker|process\.env|Date\.now|writeFile/);

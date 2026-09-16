@@ -11,9 +11,10 @@ import {
   inspectDeploymentVerificationFromEvidenceFile,
   isFullObjectId,
   validateEvidenceFreshnessPolicy,
+  validateRuntimeIdentityPolicy,
 } from "./audit-deployment-verification.js";
 
-/** @typedef {{ expectedRef?: string | null, expectedCommit?: string | null, compareRef?: string | null, deployedCommit?: string | null, evidenceFile?: string | null, maxEvidenceAgeSeconds?: number | null, evaluatedAt?: string | null }} StatusOptions */
+/** @typedef {{ expectedRef?: string | null, expectedCommit?: string | null, compareRef?: string | null, deployedCommit?: string | null, evidenceFile?: string | null, maxEvidenceAgeSeconds?: number | null, evaluatedAt?: string | null, expectedRuntimeName?: string | null, expectedRuntimeEnvironment?: string | null }} StatusOptions */
 
 /** @param {unknown} error */
 function errorDetail(error) {
@@ -164,6 +165,7 @@ function deploymentDimension(report) {
     deployedCommit: report.deployedCommit,
     evidence: report.evidence,
     freshness: report.freshness,
+    runtimeIdentity: report.runtimeIdentity,
     checks: report.checks,
   };
 }
@@ -182,6 +184,7 @@ function notConfiguredDeployment() {
     deployedCommit: null,
     evidence: null,
     freshness: null,
+    runtimeIdentity: null,
     checks: [],
   };
 }
@@ -195,6 +198,8 @@ function inspectDeployment(target, options) {
       evidenceFile: options.evidenceFile,
       maxEvidenceAgeSeconds: options.maxEvidenceAgeSeconds ?? null,
       evaluatedAt: options.evaluatedAt ?? null,
+      expectedRuntimeName: options.expectedRuntimeName ?? null,
+      expectedRuntimeEnvironment: options.expectedRuntimeEnvironment ?? null,
     });
     if (!result.ok) {
       const error = new Error(result.error.detail);
@@ -241,6 +246,14 @@ export function inspectRepositoryStatus(target, options = {}) {
   if (!freshnessPolicy.ok) throw new Error(freshnessPolicy.error.detail);
   if (freshnessPolicy.policy !== null && !options.evidenceFile) {
     throw new Error("freshness policy requires Runtime Evidence file input");
+  }
+  const runtimeIdentityPolicy = validateRuntimeIdentityPolicy(
+    options.expectedRuntimeName ?? null,
+    options.expectedRuntimeEnvironment ?? null,
+  );
+  if (!runtimeIdentityPolicy.ok) throw new Error(runtimeIdentityPolicy.error.detail);
+  if (runtimeIdentityPolicy.policy !== null && !options.evidenceFile) {
+    throw new Error("runtime identity policy requires Runtime Evidence file input");
   }
 
   const baseline = baselineConfigured
@@ -298,8 +311,11 @@ export function formatRepositoryStatus(report) {
   const freshnessLabel = deployment.freshness?.configured
     ? `; ${deployment.freshness.status}`
     : "";
+  const identityLabel = deployment.runtimeIdentity?.configured
+    ? `; IDENTITY_${deployment.runtimeIdentity.status}`
+    : "";
   const deploymentLabel = deployment.configured
-    ? `${deployment.status} (${deployment.deploymentStatus}${freshnessLabel})`
+    ? `${deployment.status} (${deployment.deploymentStatus}${freshnessLabel}${identityLabel})`
     : deployment.status;
 
   return [
@@ -315,7 +331,7 @@ export function formatRepositoryStatus(report) {
   ].join("\n");
 }
 
-/** @typedef {{ expectedRef: string | null, expectedCommit: string | null, compareRef: string | null, deployedCommit: string | null, evidenceFile: string | null, maxEvidenceAgeSeconds: number | null, evaluatedAt: string | null, json: boolean, target: string | null }} CliArguments */
+/** @typedef {{ expectedRef: string | null, expectedCommit: string | null, compareRef: string | null, deployedCommit: string | null, evidenceFile: string | null, maxEvidenceAgeSeconds: number | null, evaluatedAt: string | null, expectedRuntimeName: string | null, expectedRuntimeEnvironment: string | null, json: boolean, target: string | null }} CliArguments */
 /** @param {string[]} argv @returns {CliArguments | null} */
 export function parseArguments(argv) {
   /** @type {CliArguments} */
@@ -327,6 +343,8 @@ export function parseArguments(argv) {
     evidenceFile: null,
     maxEvidenceAgeSeconds: null,
     evaluatedAt: null,
+    expectedRuntimeName: null,
+    expectedRuntimeEnvironment: null,
     json: false,
     target: null,
   };
@@ -344,7 +362,9 @@ export function parseArguments(argv) {
       argument === "--deployed-commit" ||
       argument === "--evidence-file" ||
       argument === "--max-evidence-age-seconds" ||
-      argument === "--evaluated-at"
+      argument === "--evaluated-at" ||
+      argument === "--expected-runtime-name" ||
+      argument === "--expected-runtime-environment"
     ) {
       const value = argv[index + 1];
       if (typeof value !== "string" || !value || value.startsWith("--")) return null;
@@ -361,6 +381,8 @@ export function parseArguments(argv) {
         options.maxEvidenceAgeSeconds = maxEvidenceAgeSeconds;
       }
       if (argument === "--evaluated-at") options.evaluatedAt = value;
+      if (argument === "--expected-runtime-name") options.expectedRuntimeName = value;
+      if (argument === "--expected-runtime-environment") options.expectedRuntimeEnvironment = value;
       index += 1;
     } else if (argument.startsWith("-")) {
       return null;
@@ -383,6 +405,12 @@ export function parseArguments(argv) {
   );
   if (!freshnessPolicy.ok) return null;
   if (freshnessPolicy.policy !== null && options.evidenceFile === null) return null;
+  const runtimeIdentityPolicy = validateRuntimeIdentityPolicy(
+    options.expectedRuntimeName,
+    options.expectedRuntimeEnvironment,
+  );
+  if (!runtimeIdentityPolicy.ok) return null;
+  if (runtimeIdentityPolicy.policy !== null && options.evidenceFile === null) return null;
   return options;
 }
 
@@ -390,7 +418,7 @@ export function main(argv = process.argv.slice(2)) {
   const options = parseArguments(argv);
   if (!options) {
     console.error(
-      "Usage: node scripts/audit-repository-status.js [repository] [--expected-ref <git-ref> | --expected-commit <commit>] [--compare-ref <git-ref>] [--deployed-commit <40-or-64-hex-object-id> | --evidence-file <runtime-evidence.json> [--max-evidence-age-seconds <seconds> --evaluated-at <absolute-iso-timestamp>]] [--json]",
+      "Usage: node scripts/audit-repository-status.js [repository] [--expected-ref <git-ref> | --expected-commit <commit>] [--compare-ref <git-ref>] [--deployed-commit <40-or-64-hex-object-id> | --evidence-file <runtime-evidence.json> [--max-evidence-age-seconds <seconds> --evaluated-at <absolute-iso-timestamp>] [--expected-runtime-name <name> [--expected-runtime-environment <environment>]]] [--json]",
     );
     return 1;
   }

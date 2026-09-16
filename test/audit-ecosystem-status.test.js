@@ -122,7 +122,7 @@ function runCli(...args) {
   return spawnSync("node", [path.resolve("scripts/audit-ecosystem-status.js"), ...args], { encoding: "utf8" });
 }
 
-/** @param {Array<{ name?: string, path: string, expectedRef?: string, expectedCommit?: string, compareRef?: string, deployedCommit?: string, evidenceFile?: string }>} repositories */
+/** @param {Array<{ name?: string, path: string, expectedRef?: string, expectedCommit?: string, compareRef?: string, deployedCommit?: string, evidenceFile?: string, maxEvidenceAgeSeconds?: number, evaluatedAt?: string, expectedRuntimeName?: string, expectedRuntimeEnvironment?: string }>} repositories */
 function config(repositories) {
   return configFile({ version: 1, repositories });
 }
@@ -291,6 +291,8 @@ test("runtime evidence paths are config-relative and retain canonical trust meta
       evidenceFile: "./runtime-evidence.json",
       maxEvidenceAgeSeconds: 3600,
       evaluatedAt: "2026-09-16T01:00:00Z",
+      expectedRuntimeName: "runtime-a",
+      expectedRuntimeEnvironment: "example-production",
     }],
   }));
   const before = fs.readFileSync(evidencePath, "utf8");
@@ -302,6 +304,7 @@ test("runtime evidence paths are config-relative and retain canonical trust meta
   assert.equal(report.overallStatus, "PASS");
   assert.equal(report.repositories[0]?.dimensions.deployment.deploymentStatus, "MATCH");
   assert.equal(report.repositories[0]?.dimensions.deployment.freshness?.status, "FRESH");
+  assert.equal(report.repositories[0]?.dimensions.deployment.runtimeIdentity?.status, "MATCH");
   assert.equal(evidence?.type, "runtime-evidence");
   assert.equal(evidence?.authenticated, true);
   assert.equal(evidence?.source, "manual");
@@ -313,6 +316,8 @@ test("runtime evidence paths are config-relative and retain canonical trust meta
     assert.equal(parsed.repositories[0]?.evidenceFile, evidencePath);
     assert.equal(parsed.repositories[0]?.maxEvidenceAgeSeconds, 3600);
     assert.equal(parsed.repositories[0]?.evaluatedAt, "2026-09-16T01:00:00Z");
+    assert.equal(parsed.repositories[0]?.expectedRuntimeName, "runtime-a");
+    assert.equal(parsed.repositories[0]?.expectedRuntimeEnvironment, "example-production");
   }
 });
 test("deployment mismatch and unavailable baselines remain aggregated warnings", () => {
@@ -428,6 +433,64 @@ test("future runtime evidence remains a non-technical ecosystem warning", () => 
   assert.equal(report.repositories[0]?.overallStatus, "WARN");
   assert.equal(report.overallStatus, "WARN");
 });
+test("ecosystem runtime identity distinguishes matching and mismatching evidence", () => {
+  const matchingRepo = createWebapp();
+  const mismatchingRepo = createWebapp();
+  assert.ok(matchingRepo.initial);
+  assert.ok(mismatchingRepo.initial);
+  const matchingEvidence = evidenceFile(runtimeEvidence(matchingRepo.initial));
+  const mismatchingEvidence = evidenceFile(runtimeEvidence(mismatchingRepo.initial));
+
+  const report = inspectEcosystemStatus([
+    {
+      name: "matching-runtime",
+      target: matchingRepo.root,
+      expectedRef: "main",
+      evidenceFile: matchingEvidence,
+      expectedRuntimeName: "runtime-a",
+      expectedRuntimeEnvironment: "example-production",
+    },
+    {
+      name: "wrong-runtime",
+      target: mismatchingRepo.root,
+      expectedRef: "main",
+      evidenceFile: mismatchingEvidence,
+      expectedRuntimeName: "other-runtime",
+    },
+  ], { inputMode: "config", configVersion: 1 });
+
+  assert.deepEqual(report.repositories.map((repository) => repository.dimensions.deployment.deploymentStatus), ["MATCH", "MATCH"]);
+  assert.deepEqual(report.repositories.map((repository) => repository.dimensions.deployment.runtimeIdentity?.status), ["MATCH", "MISMATCH"]);
+  assert.deepEqual(report.repositories.map((repository) => repository.overallStatus), ["PASS", "WARN"]);
+  assert.deepEqual(report.summary.deployment, { pass: 1, warn: 1, fail: 0, notConfigured: 0 });
+  assert.equal(report.technicalStatus, "PASS");
+  assert.equal(report.overallStatus, "WARN");
+  const rendered = formatEcosystemStatus(report);
+  assert.match(rendered, /matching-runtime.*MATCH\/IDENTITY_MATCH.*PASS/);
+  assert.match(rendered, /wrong-runtime.*MATCH\/IDENTITY_MISMATCH.*WARN/);
+});
+
+test("freshness and runtime identity compose in ecosystem status", () => {
+  const repository = createWebapp();
+  assert.ok(repository.initial);
+  const report = inspectEcosystemStatus([{
+    name: "bound-runtime",
+    target: repository.root,
+    expectedRef: "main",
+    evidenceFile: evidenceFile(runtimeEvidence(repository.initial)),
+    maxEvidenceAgeSeconds: 3600,
+    evaluatedAt: "2026-09-16T01:00:00Z",
+    expectedRuntimeName: "runtime-a",
+    expectedRuntimeEnvironment: "example-production",
+  }], { inputMode: "config", configVersion: 1 });
+
+  assert.equal(report.repositories[0]?.dimensions.deployment.deploymentStatus, "MATCH");
+  assert.equal(report.repositories[0]?.dimensions.deployment.freshness?.status, "FRESH");
+  assert.equal(report.repositories[0]?.dimensions.deployment.runtimeIdentity?.status, "MATCH");
+  assert.equal(report.repositories[0]?.overallStatus, "PASS");
+  assert.match(formatEcosystemStatus(report), /MATCH\/FRESH\/IDENTITY_MATCH/);
+});
+
 test("config entry without a selector is NOT_CONFIGURED", () => {
   const webapp = createWebapp();
   const result = runCli("--config", config([{ path: webapp.root }]), "--json");
@@ -454,6 +517,10 @@ test("config validation rejects invalid contracts and duplicate resolved targets
     { version: 1, repositories: [{ path: target, expectedRef: "main", deployedCommit: "0123456789abcdef0123456789abcdef01234567", maxEvidenceAgeSeconds: 3600, evaluatedAt: "2026-09-16T01:00:00Z" }] },
     { version: 1, repositories: [{ path: target, expectedRef: "main", evidenceFile: "runtime-evidence.json", maxEvidenceAgeSeconds: 0, evaluatedAt: "2026-09-16T01:00:00Z" }] },
     { version: 1, repositories: [{ path: target, expectedRef: "main", evidenceFile: "runtime-evidence.json", maxEvidenceAgeSeconds: 3600, evaluatedAt: "2026-09-16T01:00:00" }] },
+    { version: 1, repositories: [{ path: target, expectedRef: "main", evidenceFile: "runtime-evidence.json", expectedRuntimeEnvironment: "example-production" }] },
+    { version: 1, repositories: [{ path: target, expectedRef: "main", deployedCommit: "0123456789abcdef0123456789abcdef01234567", expectedRuntimeName: "runtime-a" }] },
+    { version: 1, repositories: [{ path: target, expectedRef: "main", evidenceFile: "runtime-evidence.json", expectedRuntimeName: "" }] },
+    { version: 1, repositories: [{ path: target, expectedRef: "main", evidenceFile: "runtime-evidence.json", expectedRuntimeName: "runtime-a", expectedRuntimeEnvironment: "" }] },
     { version: 1, repositories: [{ path: target }, { path: target }] },
   ];
 
@@ -462,7 +529,7 @@ test("config validation rejects invalid contracts and duplicate resolved targets
     assert.equal(result.status, 1);
   }
   assert.deepEqual(parseEcosystemConfig({ version: 1, repositories: [{ path: "relative" }] }, "/tmp"), {
-    repositories: [{ target: "/tmp/relative", expectedRef: null, expectedCommit: null, compareRef: null, deployedCommit: null, evidenceFile: null, maxEvidenceAgeSeconds: null, evaluatedAt: null }],
+    repositories: [{ target: "/tmp/relative", expectedRef: null, expectedCommit: null, compareRef: null, deployedCommit: null, evidenceFile: null, maxEvidenceAgeSeconds: null, evaluatedAt: null, expectedRuntimeName: null, expectedRuntimeEnvironment: null }],
   });
 });
 
@@ -524,6 +591,7 @@ test("the aggregator delegates canonical status rules and has no local Git comma
   assert.match(source, /inspectRepositoryStatus/);
   assert.match(source, /isFullObjectId/);
   assert.match(source, /validateEvidenceFreshnessPolicy/);
+  assert.match(source, /validateRuntimeIdentityPolicy/);
   assert.doesNotMatch(source, /validateRuntimeEvidence/);
   assert.doesNotMatch(source, /[0-9a-fA-F]\{40\}/);
   assert.doesNotMatch(source, /node:child_process|spawnSync|execFile|Date\.now|\["git"/);

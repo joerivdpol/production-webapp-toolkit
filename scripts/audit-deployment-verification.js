@@ -9,9 +9,12 @@ import { isAbsoluteIsoTimestamp, validateRuntimeEvidence } from "./runtime-evide
 
 /** @typedef {"PASS" | "WARN" | "FAIL"} Severity */
 /** @typedef {"FRESH" | "STALE" | "FUTURE" | "NOT_CONFIGURED" | "NOT_APPLICABLE"} FreshnessStatus */
+/** @typedef {"MATCH" | "MISMATCH" | "NOT_CONFIGURED" | "NOT_APPLICABLE"} RuntimeIdentityStatus */
 /** @typedef {{ id: string, severity: Severity, detail: string }} DeploymentCheck */
 /** @typedef {{ configured: boolean, status: FreshnessStatus, collectedAt: string | null, evaluatedAt: string | null, ageSeconds: number | null, maxAgeSeconds: number | null }} EvidenceFreshness */
 /** @typedef {{ maxEvidenceAgeSeconds: number, evaluatedAt: string }} EvidenceFreshnessPolicy */
+/** @typedef {{ configured: boolean, status: RuntimeIdentityStatus, expectedName: string | null, expectedEnvironment: string | null, actualName: string | null, actualEnvironment: string | null }} RuntimeIdentityBinding */
+/** @typedef {{ expectedRuntimeName: string, expectedRuntimeEnvironment?: string }} RuntimeIdentityPolicy */
 /**
  * @typedef {{
  *   expectedRef?: string | null,
@@ -32,6 +35,7 @@ import { isAbsoluteIsoTimestamp, validateRuntimeEvidence } from "./runtime-evide
  *   evidence: DeploymentEvidence,
  *   deploymentStatus: "MATCH" | "MISMATCH" | "UNVERIFIED",
  *   freshness: EvidenceFreshness,
+ *   runtimeIdentity: RuntimeIdentityBinding,
  *   technicalStatus: "PASS" | "FAIL",
  *   overallStatus: "PASS" | "WARN" | "FAIL",
  *   checks: DeploymentCheck[]
@@ -133,6 +137,89 @@ function freshnessCheck(freshness) {
   };
 }
 
+/** @param {DeploymentEvidence} evidence */
+function defaultRuntimeIdentity(evidence) {
+  if (evidence.type === "runtime-evidence") {
+    return {
+      configured: false,
+      status: /** @type {RuntimeIdentityStatus} */ ("NOT_CONFIGURED"),
+      expectedName: null,
+      expectedEnvironment: null,
+      actualName: evidence.runtime.name,
+      actualEnvironment: evidence.runtime.environment ?? null,
+    };
+  }
+  return {
+    configured: false,
+    status: /** @type {RuntimeIdentityStatus} */ ("NOT_APPLICABLE"),
+    expectedName: null,
+    expectedEnvironment: null,
+    actualName: null,
+    actualEnvironment: null,
+  };
+}
+
+/**
+ * @param {unknown} expectedRuntimeName
+ * @param {unknown} expectedRuntimeEnvironment
+ * @returns {{ ok: true, policy: RuntimeIdentityPolicy | null } | { ok: false, error: { id: string, detail: string } }}
+ */
+export function validateRuntimeIdentityPolicy(expectedRuntimeName, expectedRuntimeEnvironment) {
+  const nameAbsent = expectedRuntimeName === null || expectedRuntimeName === undefined;
+  const environmentAbsent = expectedRuntimeEnvironment === null || expectedRuntimeEnvironment === undefined;
+  if (nameAbsent && environmentAbsent) return { ok: true, policy: null };
+  if (nameAbsent) {
+    return { ok: false, error: { id: "runtime-identity-name-missing", detail: "expectedRuntimeEnvironment requires expectedRuntimeName" } };
+  }
+  if (typeof expectedRuntimeName !== "string" || expectedRuntimeName.trim().length === 0) {
+    return { ok: false, error: { id: "runtime-identity-name-invalid", detail: "expectedRuntimeName must be a non-empty string" } };
+  }
+  if (!environmentAbsent && (typeof expectedRuntimeEnvironment !== "string" || expectedRuntimeEnvironment.trim().length === 0)) {
+    return { ok: false, error: { id: "runtime-identity-environment-invalid", detail: "expectedRuntimeEnvironment must be a non-empty string when supplied" } };
+  }
+  return {
+    ok: true,
+    policy: {
+      expectedRuntimeName: expectedRuntimeName.trim(),
+      ...(environmentAbsent ? {} : { expectedRuntimeEnvironment: /** @type {string} */ (expectedRuntimeEnvironment).trim() }),
+    },
+  };
+}
+
+/** @param {DeploymentEvidence} evidence @param {RuntimeIdentityPolicy | null} policy */
+function evaluateRuntimeIdentity(evidence, policy) {
+  if (policy === null) return defaultRuntimeIdentity(evidence);
+  if (evidence.type !== "runtime-evidence") return defaultRuntimeIdentity(evidence);
+  const actualEnvironment = evidence.runtime.environment ?? null;
+  const environmentMatches = policy.expectedRuntimeEnvironment === undefined || actualEnvironment === policy.expectedRuntimeEnvironment;
+  const matches = evidence.runtime.name === policy.expectedRuntimeName && environmentMatches;
+  return {
+    configured: true,
+    status: /** @type {RuntimeIdentityStatus} */ (matches ? "MATCH" : "MISMATCH"),
+    expectedName: policy.expectedRuntimeName,
+    expectedEnvironment: policy.expectedRuntimeEnvironment ?? null,
+    actualName: evidence.runtime.name,
+    actualEnvironment,
+  };
+}
+
+/** @param {RuntimeIdentityBinding} identity */
+function runtimeIdentityCheck(identity) {
+  if (!identity.configured) return null;
+  if (identity.status === "MATCH") {
+    return {
+      id: "runtime-identity",
+      severity: /** @type {Severity} */ ("PASS"),
+      detail: "runtime evidence identity matches the explicit runtime identity policy",
+    };
+  }
+  return {
+    id: "runtime-identity",
+    severity: /** @type {Severity} */ ("WARN"),
+    detail: "runtime evidence identity differs from the explicit runtime identity policy",
+  };
+}
+
 /** @param {DeploymentVerificationReport} report */
 function deriveOverallStatus(report) {
   report.overallStatus =
@@ -142,7 +229,9 @@ function deriveOverallStatus(report) {
         ? "WARN"
         : report.freshness.configured && report.freshness.status !== "FRESH"
           ? "WARN"
-          : "PASS";
+          : report.runtimeIdentity.configured && report.runtimeIdentity.status !== "MATCH"
+            ? "WARN"
+            : "PASS";
   return report;
 }
 
@@ -196,7 +285,7 @@ function evidenceSubject(evidence) {
  * it.
  *
  * @param {string} target
- * @param {{ expectedRef?: string | null, expectedCommit?: string | null, deployedCommit: string | null, evidence: DeploymentEvidence, freshnessPolicy?: EvidenceFreshnessPolicy | null }} options
+ * @param {{ expectedRef?: string | null, expectedCommit?: string | null, deployedCommit: string | null, evidence: DeploymentEvidence, freshnessPolicy?: EvidenceFreshnessPolicy | null, runtimeIdentityPolicy?: RuntimeIdentityPolicy | null }} options
  * @returns {DeploymentVerificationReport}
  */
 function inspectNormalizedDeploymentVerification(target, options) {
@@ -204,6 +293,7 @@ function inspectNormalizedDeploymentVerification(target, options) {
   const deployedCommit = options.deployedCommit?.toLowerCase() ?? null;
   const evidence = deploymentEvidence(options);
   const freshness = evaluateEvidenceFreshness(evidence, options.freshnessPolicy ?? null);
+  const runtimeIdentity = evaluateRuntimeIdentity(evidence, options.runtimeIdentityPolicy ?? null);
 
   let baseline;
   try {
@@ -223,6 +313,7 @@ function inspectNormalizedDeploymentVerification(target, options) {
       evidence,
       deploymentStatus: "UNVERIFIED",
       freshness,
+      runtimeIdentity,
       technicalStatus: "FAIL",
       overallStatus: "FAIL",
       checks: [
@@ -253,6 +344,7 @@ function inspectNormalizedDeploymentVerification(target, options) {
     evidence,
     deploymentStatus: "UNVERIFIED",
     freshness,
+    runtimeIdentity,
     technicalStatus: baseline.technicalStatus,
     overallStatus: "WARN",
     checks: [...baseline.checks],
@@ -267,6 +359,8 @@ function inspectNormalizedDeploymentVerification(target, options) {
   });
   const evidenceFreshnessCheck = freshnessCheck(report.freshness);
   if (evidenceFreshnessCheck) report.checks.push(evidenceFreshnessCheck);
+  const identityCheck = runtimeIdentityCheck(report.runtimeIdentity);
+  if (identityCheck) report.checks.push(identityCheck);
 
   if (report.technicalStatus === "FAIL") {
     report.checks.push({
@@ -360,7 +454,7 @@ export function inspectDeploymentVerification(target, options = {}) {
  * mismatches or unverifiable runtime claims.
  *
  * @param {string} target
- * @param {{ expectedRef?: string | null, expectedCommit?: string | null, evidenceFile: string, maxEvidenceAgeSeconds?: number | null, evaluatedAt?: string | null }} options
+ * @param {{ expectedRef?: string | null, expectedCommit?: string | null, evidenceFile: string, maxEvidenceAgeSeconds?: number | null, evaluatedAt?: string | null, expectedRuntimeName?: string | null, expectedRuntimeEnvironment?: string | null }} options
  * @returns {{ ok: true, report: DeploymentVerificationReport } | { ok: false, error: { id: string, detail: string } }}
  */
 export function inspectDeploymentVerificationFromEvidenceFile(target, options) {
@@ -394,6 +488,11 @@ export function inspectDeploymentVerificationFromEvidenceFile(target, options) {
     options.evaluatedAt ?? null,
   );
   if (!freshnessPolicyResult.ok) return freshnessPolicyResult;
+  const runtimeIdentityPolicyResult = validateRuntimeIdentityPolicy(
+    options.expectedRuntimeName ?? null,
+    options.expectedRuntimeEnvironment ?? null,
+  );
+  if (!runtimeIdentityPolicyResult.ok) return runtimeIdentityPolicyResult;
 
   const evidence = runtimeEvidenceTrustMetadata(validation.evidence);
   return {
@@ -404,6 +503,7 @@ export function inspectDeploymentVerificationFromEvidenceFile(target, options) {
       deployedCommit: validation.evidence.deployment.commit,
       evidence,
       freshnessPolicy: freshnessPolicyResult.policy,
+      runtimeIdentityPolicy: runtimeIdentityPolicyResult.policy,
     }),
   };
 }
@@ -417,6 +517,9 @@ export function formatDeploymentVerification(report) {
   const freshnessDescription = report.freshness.configured
     ? `${report.freshness.status}; age: ${report.freshness.ageSeconds}s; max: ${report.freshness.maxAgeSeconds}s; evaluated at: ${report.freshness.evaluatedAt}`
     : report.freshness.status;
+  const identityDescription = report.runtimeIdentity.configured
+    ? `${report.runtimeIdentity.status}; expected name: ${report.runtimeIdentity.expectedName}; actual name: ${report.runtimeIdentity.actualName}; expected environment: ${report.runtimeIdentity.expectedEnvironment ?? "(not supplied)"}; actual environment: ${report.runtimeIdentity.actualEnvironment ?? "(not supplied)"}`
+    : report.runtimeIdentity.status;
   const lines = [
     `Deployment verification: ${report.root}`,
     "",
@@ -426,6 +529,7 @@ export function formatDeploymentVerification(report) {
     `Deployed commit: ${report.deployedCommit ?? "(invalid or unavailable)"}`,
     `Deployed evidence: ${evidenceDescription}`,
     `Evidence freshness: ${freshnessDescription}`,
+    `Runtime identity: ${identityDescription}`,
     "",
   ];
 
@@ -443,7 +547,7 @@ export function formatDeploymentVerification(report) {
   return lines.join("\n");
 }
 
-/** @typedef {{ expectedRef: string | null, expectedCommit: string | null, deployedCommit: string | null, evidenceFile: string | null, maxEvidenceAgeSeconds: number | null, evaluatedAt: string | null, json: boolean, target: string | null }} CliArguments */
+/** @typedef {{ expectedRef: string | null, expectedCommit: string | null, deployedCommit: string | null, evidenceFile: string | null, maxEvidenceAgeSeconds: number | null, evaluatedAt: string | null, expectedRuntimeName: string | null, expectedRuntimeEnvironment: string | null, json: boolean, target: string | null }} CliArguments */
 /** @param {string[]} argv @returns {CliArguments | null} */
 export function parseArguments(argv) {
   /** @type {CliArguments} */
@@ -454,6 +558,8 @@ export function parseArguments(argv) {
     evidenceFile: null,
     maxEvidenceAgeSeconds: null,
     evaluatedAt: null,
+    expectedRuntimeName: null,
+    expectedRuntimeEnvironment: null,
     json: false,
     target: null,
   };
@@ -470,7 +576,9 @@ export function parseArguments(argv) {
       argument === "--deployed-commit" ||
       argument === "--evidence-file" ||
       argument === "--max-evidence-age-seconds" ||
-      argument === "--evaluated-at"
+      argument === "--evaluated-at" ||
+      argument === "--expected-runtime-name" ||
+      argument === "--expected-runtime-environment"
     ) {
       const value = argv[index + 1];
       if (typeof value !== "string" || !value || value.startsWith("--")) return null;
@@ -486,6 +594,8 @@ export function parseArguments(argv) {
         options.maxEvidenceAgeSeconds = maxEvidenceAgeSeconds;
       }
       if (argument === "--evaluated-at") options.evaluatedAt = value;
+      if (argument === "--expected-runtime-name") options.expectedRuntimeName = value;
+      if (argument === "--expected-runtime-environment") options.expectedRuntimeEnvironment = value;
       index += 1;
     } else if (argument.startsWith("-")) {
       return null;
@@ -510,6 +620,12 @@ export function parseArguments(argv) {
     options.evaluatedAt,
   );
   if (!freshnessPolicy.ok) return null;
+  const runtimeIdentityPolicy = validateRuntimeIdentityPolicy(
+    options.expectedRuntimeName,
+    options.expectedRuntimeEnvironment,
+  );
+  if (!runtimeIdentityPolicy.ok) return null;
+  if (runtimeIdentityPolicy.policy !== null && options.evidenceFile === null) return null;
 
   return options;
 }
@@ -518,7 +634,7 @@ export function main(argv = process.argv.slice(2)) {
   const options = parseArguments(argv);
   if (!options) {
     console.error(
-      "Usage: node scripts/audit-deployment-verification.js [repository] (--expected-ref <git-ref> | --expected-commit <commit>) (--deployed-commit <40-or-64-hex-object-id> | --evidence-file <runtime-evidence.json> [--max-evidence-age-seconds <seconds> --evaluated-at <absolute-iso-timestamp>]) [--json]",
+      "Usage: node scripts/audit-deployment-verification.js [repository] (--expected-ref <git-ref> | --expected-commit <commit>) (--deployed-commit <40-or-64-hex-object-id> | --evidence-file <runtime-evidence.json> [--max-evidence-age-seconds <seconds> --evaluated-at <absolute-iso-timestamp>] [--expected-runtime-name <name> [--expected-runtime-environment <environment>]]) [--json]",
     );
     return 1;
   }
@@ -534,6 +650,8 @@ export function main(argv = process.argv.slice(2)) {
         evidenceFile: options.evidenceFile,
         maxEvidenceAgeSeconds: options.maxEvidenceAgeSeconds,
         evaluatedAt: options.evaluatedAt,
+        expectedRuntimeName: options.expectedRuntimeName,
+        expectedRuntimeEnvironment: options.expectedRuntimeEnvironment,
       },
     );
     if (!result.ok) {
