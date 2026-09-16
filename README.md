@@ -228,7 +228,7 @@ The repository-status layer adds no network access, runtime probing, target-repo
 
 `bun run audit:ecosystem-status` aggregates the canonical repository-status report for several repositories. It does not add QUALITY, GOVERNANCE, BASELINE, DEPLOYMENT, or CI rules, choose a branch, or infer a production baseline from `main`, remote `HEAD`, or governance production candidates.
 
-The current ecosystem configuration contract does not yet accept CI evidence. Repository status therefore contributes `CI NOT_CONFIGURED`, so a repository with matching deployment evidence remains overall `WARN` until the next ecosystem CI integration capability lands.
+Config mode can supply deployment and CI evidence independently for each repository. CI configuration uses the same explicit contract as repository status: a CI evidence file, an expected full Git object ID, and at least one required check. Ecosystem status never infers the CI expected commit from a baseline, deployment, `HEAD`, branch, or another repository.
 
 Config mode can supply deployment evidence independently for each repository. A repository may use either `deployedCommit` with a full Git object ID or `evidenceFile` with a Runtime Evidence Contract v1 document. Deployment evidence requires an explicit `expectedRef` and/or `expectedCommit`; the two deployment inputs are mutually exclusive. Repositories without deployment evidence continue to report `DEPLOYMENT NOT_CONFIGURED` and contribute a readiness warning when their other dimensions pass.
 
@@ -259,7 +259,10 @@ Use `--config` for explicit, per-repository baseline selectors. Positional paths
       "maxEvidenceAgeSeconds": 3600,
       "evaluatedAt": "2026-09-16T12:00:00Z",
       "expectedRuntimeName": "worker-b-runtime",
-      "expectedRuntimeEnvironment": "production"
+      "expectedRuntimeEnvironment": "production",
+      "ciEvidenceFile": "./evidence/worker-b-ci.json",
+      "ciExpectedCommit": "0123456789abcdef0123456789abcdef01234567",
+      "requiredCiChecks": ["typecheck", "test", "lint", "build"]
     },
     {
       "path": "/path/to/app-c"
@@ -268,14 +271,16 @@ Use `--config` for explicit, per-repository baseline selectors. Positional paths
 }
 ```
 
-`name` is display metadata only. A repository with no `expectedRef` or `expectedCommit` remains `BASELINE NOT_CONFIGURED`; `compareRef` requires one of those selectors. `deployedCommit` and `evidenceFile` require a baseline and cannot be supplied together. Direct deployment commits reuse the canonical full-object-ID validator. Evidence files are resolved relative to the ecosystem config file and are validated through repository status and the canonical Runtime Evidence Contract adapter. `maxEvidenceAgeSeconds` and `evaluatedAt` are an optional pair, valid only with `evidenceFile`, and reuse the canonical freshness policy validator. `expectedRuntimeName` optionally binds the evidence to a specific runtime; `expectedRuntimeEnvironment` is optional but requires the name, and both reuse the canonical runtime identity policy validator. Duplicate resolved target paths are rejected, preventing duplicate counts.
+`name` is display metadata only. A repository with no `expectedRef` or `expectedCommit` remains `BASELINE NOT_CONFIGURED`; `compareRef` requires one of those selectors. `deployedCommit` and `evidenceFile` require a baseline and cannot be supplied together. Direct deployment commits reuse the canonical full-object-ID validator. Runtime evidence files are resolved relative to the ecosystem config file and are validated through repository status and the canonical Runtime Evidence Contract adapter. `maxEvidenceAgeSeconds` and `evaluatedAt` are an optional pair, valid only with `evidenceFile`, and reuse the canonical freshness policy validator. `expectedRuntimeName` optionally binds the evidence to a specific runtime; `expectedRuntimeEnvironment` is optional but requires the name, and both reuse the canonical runtime identity policy validator.
+
+`ciEvidenceFile`, `ciExpectedCommit`, and non-empty `requiredCiChecks` are an all-or-nothing CI configuration. CI evidence paths are also resolved relative to the ecosystem config file. The expected commit and required check names are normalized by the canonical CI verification policy; required check names must be non-empty and unique after trimming. CI verification failures remain isolated to the affected repository so later repositories are still inspected. Duplicate resolved repository target paths are rejected, preventing duplicate counts.
 
 ```sh
 bun run audit:ecosystem-status --config /private/path/ecosystem-status.json
 bun run audit:ecosystem-status --config /private/path/ecosystem-status.json --json
 ```
 
-The stable JSON report contains `inputMode`, optional `configVersion`, ordered `repositories`, machine-readable `summary`, `technicalStatus`, and `overallStatus`; it never prints config-file contents or the config path. The summary counts deployment `pass`, `warn`, `fail`, and `notConfigured` states alongside the existing dimensions, and the human scorecard includes a `DEPLOYMENT` column. Configured policy state is visible in labels such as `MATCH/FRESH/IDENTITY_MATCH` or `MATCH/IDENTITY_MISMATCH`. Overall status is `FAIL` when any repository fails, otherwise `WARN` when any repository warns, otherwise `PASS`. Technical status fails only when at least one repository has a technical failure. `FAIL` exits 1; `PASS` and `WARN` exit 0. A failed or missing target, unreadable evidence file, malformed evidence document, or schema-invalid runtime evidence is isolated to that repository so the remaining repositories are still inspected.
+The stable JSON report contains `inputMode`, optional `configVersion`, ordered `repositories`, machine-readable `summary`, `technicalStatus`, and `overallStatus`; it never prints config-file contents or the config path. The summary counts both deployment and CI `pass`, `warn`, `fail`, and `notConfigured` states alongside the existing dimensions. The human scorecard includes `DEPLOYMENT` and `CI` columns. Deployment policy state is visible in labels such as `MATCH/FRESH/IDENTITY_MATCH`; CI state is visible as `MATCH/PASS`, `MISMATCH/PASS`, `MATCH/UNVERIFIED`, or `FAIL/MATCH/FAIL`. Overall status is `FAIL` when any repository fails, otherwise `WARN` when any repository warns, otherwise `PASS`. Technical status fails only when at least one repository has a technical inspection failure. A required CI `FAIL` can therefore make ecosystem overall `FAIL` while technical status remains `PASS`. `FAIL` exits 1; `PASS` and `WARN` exit 0. A failed or missing target, unreadable evidence file, malformed evidence document, or schema-invalid runtime or CI evidence is isolated to that repository so the remaining repositories are still inspected.
 
 The command is read only and offline. The ecosystem layer only reads an explicitly supplied JSON config and calls the in-process repository-status inspector; it runs no Git command itself and performs no fetch, network request, checkout, or target-repository write.
 

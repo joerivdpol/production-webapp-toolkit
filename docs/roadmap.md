@@ -43,8 +43,8 @@ Core principles:
 ### Current v1.2 progress
 
 * CI Evidence Contract v1 and explicit CI verification: merged.
-* Repository CI status integration: implementation in progress.
-* Ecosystem CI status integration remains open.
+* Repository CI status integration: merged.
+* Ecosystem CI status integration: implementation in progress.
 * Provider collection, GitHub protection auditing, and the remaining production-readiness capabilities remain open.
 
 10. Add CI evidence for the exact commit being evaluated, including tests, typecheck, lint, and build outcomes.

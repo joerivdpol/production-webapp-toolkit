@@ -34,7 +34,7 @@ function normalizeRequiredCheck(value) {
  * @param {unknown} requiredChecks
  * @returns {{ ok: true, policy: { expectedCommit: string, requiredChecks: string[] } } | { ok: false, error: { id: string, detail: string } }}
  */
-function validateVerificationPolicy(expectedCommit, requiredChecks) {
+export function validateCiVerificationPolicy(expectedCommit, requiredChecks) {
   if (typeof expectedCommit !== "string" || !isFullObjectId(expectedCommit)) {
     return { ok: false, error: { id: "expected-commit-invalid", detail: "expectedCommit must be a full 40- or 64-character hexadecimal Git object ID" } };
   }
@@ -111,7 +111,7 @@ export function inspectCiVerification(value, options = {}) {
   if (!validation.valid || !validation.evidence) {
     return { ok: false, error: { id: "ci-evidence-invalid", detail: "CI evidence does not satisfy CI Evidence Contract v1" } };
   }
-  const policy = validateVerificationPolicy(options.expectedCommit, options.requiredChecks);
+  const policy = validateCiVerificationPolicy(options.expectedCommit, options.requiredChecks);
   if (!policy.ok) return policy;
   return { ok: true, report: buildReport(validation.evidence, policy.policy) };
 }
@@ -193,7 +193,7 @@ export function parseArguments(argv) {
   }
 
   if (evidenceFile === null || expectedCommit === null || requiredChecks.length === 0) return null;
-  const policy = validateVerificationPolicy(expectedCommit, requiredChecks);
+  const policy = validateCiVerificationPolicy(expectedCommit, requiredChecks);
   if (!policy.ok) return null;
   return {
     evidenceFile,

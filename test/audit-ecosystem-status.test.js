@@ -122,7 +122,7 @@ function runCli(...args) {
   return spawnSync("node", [path.resolve("scripts/audit-ecosystem-status.js"), ...args], { encoding: "utf8" });
 }
 
-/** @param {Array<{ name?: string, path: string, expectedRef?: string, expectedCommit?: string, compareRef?: string, deployedCommit?: string, evidenceFile?: string, maxEvidenceAgeSeconds?: number, evaluatedAt?: string, expectedRuntimeName?: string, expectedRuntimeEnvironment?: string }>} repositories */
+/** @param {Array<{ name?: string, path: string, expectedRef?: string, expectedCommit?: string, compareRef?: string, deployedCommit?: string, evidenceFile?: string, maxEvidenceAgeSeconds?: number, evaluatedAt?: string, expectedRuntimeName?: string, expectedRuntimeEnvironment?: string, ciEvidenceFile?: string, ciExpectedCommit?: string, requiredCiChecks?: string[] }>} repositories */
 function config(repositories) {
   return configFile({ version: 1, repositories });
 }
@@ -148,6 +148,30 @@ function runtimeEvidence(commit, options = {}) {
 function evidenceFile(value) {
   const directory = temporaryDirectory("ecosystem-status-evidence-");
   const file = path.join(directory, "runtime-evidence.json");
+  fs.writeFileSync(file, typeof value === "string" ? value : JSON.stringify(value));
+  return file;
+}
+
+/** @param {string} commit @returns {Record<string, any>} */
+function ciEvidence(commit) {
+  return {
+    version: 1,
+    commit,
+    ci: { provider: "github-actions", workflow: "CI", runId: "12345" },
+    evidence: { source: "github-api", authenticated: false, collectedAt: "2026-09-16T00:00:00Z" },
+    checks: [
+      { name: "typecheck", status: "PASS" },
+      { name: "test", status: "PASS" },
+      { name: "lint", status: "PASS" },
+      { name: "build", status: "PASS" },
+    ],
+  };
+}
+
+/** @param {unknown} value */
+function ciEvidenceFile(value) {
+  const directory = temporaryDirectory("ecosystem-status-ci-evidence-");
+  const file = path.join(directory, "ci-evidence.json");
   fs.writeFileSync(file, typeof value === "string" ? value : JSON.stringify(value));
   return file;
 }
@@ -491,6 +515,178 @@ test("freshness and runtime identity compose in ecosystem status", () => {
   assert.match(formatEcosystemStatus(report), /MATCH\/FRESH\/IDENTITY_MATCH/);
 });
 
+test("configured matching CI evidence can make the ecosystem fully PASS", () => {
+  const webapp = createWebapp();
+  const python = createPythonService();
+  assert.ok(webapp.initial);
+  assert.ok(python.initial);
+
+  const result = runCli("--config", config([
+    {
+      name: "app-a",
+      path: webapp.root,
+      expectedRef: "main",
+      deployedCommit: webapp.initial,
+      ciEvidenceFile: ciEvidenceFile(ciEvidence(webapp.initial)),
+      ciExpectedCommit: webapp.initial,
+      requiredCiChecks: ["typecheck", "test", "lint", "build"],
+    },
+    {
+      name: "worker-b",
+      path: python.root,
+      expectedRef: "main",
+      deployedCommit: python.initial,
+      ciEvidenceFile: ciEvidenceFile(ciEvidence(python.initial)),
+      ciExpectedCommit: python.initial,
+      requiredCiChecks: ["test"],
+    },
+  ]), "--json");
+  const report = JSON.parse(result.stdout);
+
+  assert.equal(result.status, 0);
+  assert.equal(report.overallStatus, "PASS");
+  assert.deepEqual(report.repositories.map((/** @type {any} */ repository) => repository.dimensions.ci.status), ["PASS", "PASS"]);
+  assert.deepEqual(report.summary.ci, { pass: 2, warn: 0, fail: 0, notConfigured: 0 });
+});
+test("CI evidence paths are config-relative and retain trust metadata", () => {
+  const repository = createWebapp();
+  assert.ok(repository.initial);
+  const directory = temporaryDirectory("ecosystem-status-relative-ci-");
+  const evidencePath = path.join(directory, "ci-evidence.json");
+  const configPath = path.join(directory, "ecosystem-status.json");
+  const evidence = ciEvidence(repository.initial);
+  evidence.evidence.authenticated = true;
+  fs.writeFileSync(evidencePath, JSON.stringify(evidence));
+  fs.writeFileSync(configPath, JSON.stringify({
+    version: 1,
+    repositories: [{
+      name: "app-a",
+      path: repository.root,
+      expectedRef: "main",
+      deployedCommit: repository.initial,
+      ciEvidenceFile: "./ci-evidence.json",
+      ciExpectedCommit: repository.initial,
+      requiredCiChecks: ["typecheck", "test"],
+    }],
+  }));
+
+  const before = fs.readFileSync(evidencePath, "utf8");
+  const result = runCli("--config", configPath, "--json");
+  const report = JSON.parse(result.stdout);
+  assert.equal(result.status, 0);
+  assert.equal(report.overallStatus, "PASS");
+  assert.equal(report.repositories[0]?.dimensions.ci.commitStatus, "MATCH");
+  assert.equal(report.repositories[0]?.dimensions.ci.checksStatus, "PASS");
+  assert.equal(report.repositories[0]?.dimensions.ci.evidence?.trust?.authenticated, true);
+  assert.equal(fs.readFileSync(evidencePath, "utf8"), before);
+
+  const parsed = parseEcosystemConfig(JSON.parse(fs.readFileSync(configPath, "utf8")), directory);
+  assert.equal("error" in parsed, false);
+  if (!("error" in parsed)) {
+    assert.equal(parsed.repositories[0]?.ciEvidenceFile, evidencePath);
+    assert.equal(parsed.repositories[0]?.ciExpectedCommit, repository.initial);
+    assert.deepEqual(parsed.repositories[0]?.requiredCiChecks, ["typecheck", "test"]);
+  }
+});
+test("CI commit mismatch and unverifiable required checks aggregate as warnings", () => {
+  const mismatchRepo = createWebapp();
+  const skippedRepo = createWebapp();
+  assert.ok(mismatchRepo.initial);
+  assert.ok(skippedRepo.initial);
+  const different = "89abcdef0123456789abcdef0123456789abcdef";
+  const skippedEvidence = ciEvidence(skippedRepo.initial);
+  skippedEvidence.checks[1].status = "SKIPPED";
+
+  const report = inspectEcosystemStatus([
+    {
+      name: "mismatch",
+      target: mismatchRepo.root,
+      expectedRef: "main",
+      deployedCommit: mismatchRepo.initial,
+      ciEvidenceFile: ciEvidenceFile(ciEvidence(different)),
+      ciExpectedCommit: mismatchRepo.initial,
+      requiredCiChecks: ["typecheck", "test"],
+    },
+    {
+      name: "skipped",
+      target: skippedRepo.root,
+      expectedRef: "main",
+      deployedCommit: skippedRepo.initial,
+      ciEvidenceFile: ciEvidenceFile(skippedEvidence),
+      ciExpectedCommit: skippedRepo.initial,
+      requiredCiChecks: ["typecheck", "test"],
+    },
+  ], { inputMode: "config", configVersion: 1 });
+
+  assert.deepEqual(report.repositories.map((repository) => repository.dimensions.ci.commitStatus), ["MISMATCH", "MATCH"]);
+  assert.deepEqual(report.repositories.map((repository) => repository.dimensions.ci.checksStatus), ["PASS", "UNVERIFIED"]);
+  assert.deepEqual(report.repositories.map((repository) => repository.overallStatus), ["WARN", "WARN"]);
+  assert.deepEqual(report.summary.ci, { pass: 0, warn: 2, fail: 0, notConfigured: 0 });
+  assert.equal(report.technicalStatus, "PASS");
+  assert.equal(report.overallStatus, "WARN");
+});
+
+test("required CI failure blocks ecosystem without becoming a technical failure", () => {
+  const repository = createWebapp();
+  assert.ok(repository.initial);
+  const evidence = ciEvidence(repository.initial);
+  evidence.checks[1].status = "FAIL";
+  const report = inspectEcosystemStatus([{
+    name: "failed-ci",
+    target: repository.root,
+    expectedRef: "main",
+    deployedCommit: repository.initial,
+    ciEvidenceFile: ciEvidenceFile(evidence),
+    ciExpectedCommit: repository.initial,
+    requiredCiChecks: ["typecheck", "test"],
+  }], { inputMode: "config", configVersion: 1 });
+
+  assert.equal(report.repositories[0]?.dimensions.ci.status, "FAIL");
+  assert.equal(report.repositories[0]?.technicalStatus, "PASS");
+  assert.equal(report.repositories[0]?.overallStatus, "FAIL");
+  assert.deepEqual(report.summary.ci, { pass: 0, warn: 0, fail: 1, notConfigured: 0 });
+  assert.equal(report.technicalStatus, "PASS");
+  assert.equal(report.overallStatus, "FAIL");
+});
+test("invalid CI evidence is isolated to its repository while later repositories continue", () => {
+  const invalidRepo = createWebapp();
+  const goodRepo = createWebapp();
+  assert.ok(invalidRepo.initial);
+  assert.ok(goodRepo.initial);
+  const invalidEvidence = ciEvidence(invalidRepo.initial);
+  invalidEvidence.checks[0].status = "SUCCESS";
+
+  const report = inspectEcosystemStatus([
+    {
+      name: "invalid-ci",
+      target: invalidRepo.root,
+      expectedRef: "main",
+      deployedCommit: invalidRepo.initial,
+      ciEvidenceFile: ciEvidenceFile(invalidEvidence),
+      ciExpectedCommit: invalidRepo.initial,
+      requiredCiChecks: ["typecheck"],
+    },
+    {
+      name: "good",
+      target: goodRepo.root,
+      expectedRef: "main",
+      deployedCommit: goodRepo.initial,
+      ciEvidenceFile: ciEvidenceFile(ciEvidence(goodRepo.initial)),
+      ciExpectedCommit: goodRepo.initial,
+      requiredCiChecks: ["typecheck", "test"],
+    },
+  ], { inputMode: "config", configVersion: 1 });
+
+  assert.equal(report.repositories[0]?.overallStatus, "FAIL");
+  assert.equal(report.repositories[0]?.dimensions.ci.status, "FAIL");
+  assert.equal(report.repositories[0]?.technicalStatus, "FAIL");
+  assert.equal(report.repositories[1]?.overallStatus, "PASS");
+  assert.equal(report.repositories[1]?.dimensions.ci.status, "PASS");
+  assert.deepEqual(report.summary.ci, { pass: 1, warn: 0, fail: 1, notConfigured: 0 });
+  assert.equal(report.technicalStatus, "FAIL");
+  assert.equal(report.overallStatus, "FAIL");
+});
+
 test("config entry without a selector is NOT_CONFIGURED", () => {
   const webapp = createWebapp();
   const result = runCli("--config", config([{ path: webapp.root }]), "--json");
@@ -521,6 +717,13 @@ test("config validation rejects invalid contracts and duplicate resolved targets
     { version: 1, repositories: [{ path: target, expectedRef: "main", deployedCommit: "0123456789abcdef0123456789abcdef01234567", expectedRuntimeName: "runtime-a" }] },
     { version: 1, repositories: [{ path: target, expectedRef: "main", evidenceFile: "runtime-evidence.json", expectedRuntimeName: "" }] },
     { version: 1, repositories: [{ path: target, expectedRef: "main", evidenceFile: "runtime-evidence.json", expectedRuntimeName: "runtime-a", expectedRuntimeEnvironment: "" }] },
+    { version: 1, repositories: [{ path: target, ciEvidenceFile: "ci-evidence.json" }] },
+    { version: 1, repositories: [{ path: target, ciExpectedCommit: "0123456789abcdef0123456789abcdef01234567" }] },
+    { version: 1, repositories: [{ path: target, requiredCiChecks: ["test"] }] },
+    { version: 1, repositories: [{ path: target, ciEvidenceFile: "", ciExpectedCommit: "0123456789abcdef0123456789abcdef01234567", requiredCiChecks: ["test"] }] },
+    { version: 1, repositories: [{ path: target, ciEvidenceFile: "ci-evidence.json", ciExpectedCommit: "HEAD", requiredCiChecks: ["test"] }] },
+    { version: 1, repositories: [{ path: target, ciEvidenceFile: "ci-evidence.json", ciExpectedCommit: "0123456789abcdef0123456789abcdef01234567", requiredCiChecks: [] }] },
+    { version: 1, repositories: [{ path: target, ciEvidenceFile: "ci-evidence.json", ciExpectedCommit: "0123456789abcdef0123456789abcdef01234567", requiredCiChecks: ["test", " test "] }] },
     { version: 1, repositories: [{ path: target }, { path: target }] },
   ];
 
@@ -529,7 +732,7 @@ test("config validation rejects invalid contracts and duplicate resolved targets
     assert.equal(result.status, 1);
   }
   assert.deepEqual(parseEcosystemConfig({ version: 1, repositories: [{ path: "relative" }] }, "/tmp"), {
-    repositories: [{ target: "/tmp/relative", expectedRef: null, expectedCommit: null, compareRef: null, deployedCommit: null, evidenceFile: null, maxEvidenceAgeSeconds: null, evaluatedAt: null, expectedRuntimeName: null, expectedRuntimeEnvironment: null }],
+    repositories: [{ target: "/tmp/relative", expectedRef: null, expectedCommit: null, compareRef: null, deployedCommit: null, evidenceFile: null, maxEvidenceAgeSeconds: null, evaluatedAt: null, expectedRuntimeName: null, expectedRuntimeEnvironment: null, ciEvidenceFile: null, ciExpectedCommit: null, requiredCiChecks: null }],
   });
 });
 
@@ -578,9 +781,10 @@ test("JSON output, aggregate summary, order, and human scorecard are stable", ()
     governance: { pass: 3, warn: 0, fail: 0 },
     baseline: { pass: 2, warn: 0, fail: 0, notConfigured: 1 },
     deployment: { pass: 0, warn: 0, fail: 0, notConfigured: 3 },
+    ci: { pass: 0, warn: 0, fail: 0, notConfigured: 3 },
     profiles: { webapp: 3, "python-service": 0, unknown: 0 },
   });
-  assert.match(rendered, /REPOSITORY.*QUALITY.*GOVERNANCE.*BASELINE.*DEPLOYMENT.*OVERALL/);
+  assert.match(rendered, /REPOSITORY.*QUALITY.*GOVERNANCE.*BASELINE.*DEPLOYMENT.*CI.*OVERALL/);
   assert.match(rendered, /first/);
   assert.match(rendered, /Result: FAIL/);
   assert.equal(main([passing.root]), 0);
@@ -592,7 +796,9 @@ test("the aggregator delegates canonical status rules and has no local Git comma
   assert.match(source, /isFullObjectId/);
   assert.match(source, /validateEvidenceFreshnessPolicy/);
   assert.match(source, /validateRuntimeIdentityPolicy/);
+  assert.match(source, /validateCiVerificationPolicy/);
   assert.doesNotMatch(source, /validateRuntimeEvidence/);
+  assert.doesNotMatch(source, /validateCiEvidence/);
   assert.doesNotMatch(source, /[0-9a-fA-F]\{40\}/);
   assert.doesNotMatch(source, /node:child_process|spawnSync|execFile|Date\.now|\["git"/);
 });
