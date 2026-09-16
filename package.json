@@ -64,7 +64,9 @@
     "audit:licenses": "node scripts/audit-licenses.js",
     "audit:reproducibility": "node scripts/audit-build-reproducibility.js",
     "artifact:provenance": "node scripts/artifact-provenance.js",
-    "audit:artifact-provenance": "node scripts/audit-artifact-provenance.js"
+    "audit:artifact-provenance": "node scripts/audit-artifact-provenance.js",
+    "change:evidence": "node scripts/change-surface-evidence.js",
+    "audit:release-risk": "node scripts/audit-release-risk.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",

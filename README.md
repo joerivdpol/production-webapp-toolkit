@@ -780,3 +780,16 @@ bun run audit:artifact-provenance \
 ```
 
 The validator and audit core are offline and read only. They do not build artifacts, deploy software, inspect a live runtime, call Git, read environment variables, or generate collection timestamps. `authenticated` fields are reported but never convert a matching claim into proof that a provider really built or deployed those bytes. Authenticity depends on the collector that produced the evidence; this layer only proves that explicit evidence documents form a consistent source → CI build → artifact → deployment → runtime chain.
+
+### Release risk classification
+
+`bun run change:evidence` validates Change Surface Evidence v1. The evidence is explicit input: exact base and head commits, aggregate file and line counts, declared engineering surfaces (`frontend`, `database`, `auth`, `payment`, `deployment`, `api`, `infrastructure`), and boolean flags for test changes, environment changes, and major dependency upgrades. This contract deliberately does not infer changed surfaces from a Git diff; automated changed-surface analysis is a separate roadmap capability.
+
+`bun run audit:release-risk` classifies release risk as `LOW`, `MEDIUM`, or `HIGH` using an explicit version 1 policy. The policy names high- and medium-risk surfaces, large-diff thresholds, levels for environment and major-dependency changes, and the surfaces for which unchanged tests are a risk driver. The classifier returns concrete drivers and takes the highest configured level. It does not compute an opaque numeric score or use AI judgment.
+
+```sh
+bun run change:evidence --file ./change-surface-evidence.json
+bun run audit:release-risk --evidence-file ./change-surface-evidence.json --policy /private/path/release-risk-policy.json
+```
+
+Both commands are offline and read only. Authentication metadata on change evidence is reported by the contract but does not change classification truth. Organization-specific risk policy belongs outside the public toolkit.
