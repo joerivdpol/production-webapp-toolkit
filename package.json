@@ -44,6 +44,7 @@
     "audit:env-exposure": "node scripts/audit-client-env-exposure.js",
     "audit:migration-safety": "node scripts/audit-migration-safety.js",
     "schema:snapshot": "node scripts/database-schema-snapshot.js",
+    "schema:snapshot:postgres:collect": "node scripts/collect-postgres-schema-snapshot.js",
     "audit:schema-drift": "node scripts/audit-database-schema-drift.js"
   },
   "devDependencies": {
