@@ -846,3 +846,21 @@ bun run audit:flaky-tests \
 ```
 
 The audit core is offline and read only and reuses the canonical CI Evidence v1 validator. It stores no CI history itself, reads no test logs, and does not claim why a check changed outcome. The public toolkit supplies detection semantics; projects and private organization policy decide which CI checks are blocking and how much evidence is required.
+
+### Coverage regression for changed and critical modules
+
+`bun run coverage:evidence` validates Coverage Comparison Evidence v1. One explicit evidence document binds distinct base and head Git commits to normalized baseline and candidate coverage counts plus a bounded changed-file inventory. Coverage is stored as exact `covered` and `total` counts for lines, statements, functions, and branches; percentages are derived by the audit rather than trusted from a provider report. Changed entries distinguish added, modified, deleted, renamed, and copied files, with an explicit previous path for rename and copy comparisons.
+
+`bun run audit:coverage` evaluates that evidence against Coverage Policy v1. The changed-file policy explicitly declares source path patterns, minimum candidate coverage, and maximum allowed percentage-point regression per metric. Added files enforce minimum coverage without inventing a baseline. Modified, renamed, and copied files require corresponding baseline coverage; missing candidate or required baseline evidence fails closed. Deleted files are excluded because they cannot have candidate coverage. If a previously coverable metric becomes zero-total in the candidate, the regression gate fails instead of treating the disappearance as perfect coverage.
+
+Critical modules are separate explicit policy rules. Each rule declares path patterns, whether the module must exist, and minimum aggregate coverage. Matching candidate files are aggregated by raw covered and total counts so large and small files are weighted by coverable units rather than averaged by file percentage. Optional absent modules remain visible but do not fail.
+
+```sh
+bun run coverage:evidence --file ./coverage-comparison.json
+
+bun run audit:coverage \
+  --evidence-file ./coverage-comparison.json \
+  --policy /private/path/coverage-policy.json
+```
+
+The evidence validator and audit core are offline and read only. They do not run tests, invoke Git, parse test logs, infer changed files, or claim that caller supplied coverage belongs to a commit merely because the commit id is present. A future collector can bind specific coverage providers to this contract without changing the comparison semantics. Organization-specific path patterns and thresholds remain outside the public toolkit.
