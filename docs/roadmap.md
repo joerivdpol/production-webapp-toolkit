@@ -113,7 +113,8 @@ Core principles:
 * Browser-based frontend runtime checks for route status, console/page errors, failed requests/assets, hydration markers, CSP violations, and blocked mutation attempts: merged.
 * Provider-neutral Performance Evidence v1 with exact commit/freshness binding and explicit bundle, LCP, CLS, and INP budget audit: merged.
 * Browser-based axe-core accessibility gates for explicitly configured critical routes with bounded impact thresholds and non-destructive request controls: merged.
-* SEO production checks and the remaining operational assurance capabilities remain open.
+* Browser-based SEO production checks for metadata, canonical URLs, robots, sitemap membership, hreflang, JSON-LD types, noindex and bounded internal-link health: merged.
+* Localization completeness and the remaining operational assurance capabilities remain open.
 
 35. Add runtime evidence collectors as separate adapters that emit Runtime Evidence Contract documents.
 36. Support local Git checkout evidence while clearly labeling it as checkout evidence, not process identity.
