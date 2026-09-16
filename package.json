@@ -95,7 +95,8 @@
     "route:inventory": "node scripts/route-inventory.js",
     "audit:route-coverage": "node scripts/audit-route-coverage.js",
     "audit:authorization": "node scripts/audit-authorization-policy.js",
-    "audit:webhook-safety": "node scripts/audit-webhook-safety.js"
+    "audit:webhook-safety": "node scripts/audit-webhook-safety.js",
+    "audit:payment-integrity": "node scripts/audit-payment-integrity.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",

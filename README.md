@@ -1472,3 +1472,50 @@ bun run audit:webhook-safety -- \
 Centralized safety wrappers and middleware are supported by pointing multiple controls at explicit helper files. The evidence remains deliberately structural: call presence does not prove execution order, control-flow dominance, persistence uniqueness, replay-window semantics, provider signature correctness, retry backoff behavior, or application-specific event ordering. Those properties require stronger integration, database, or provider-specific evidence outside this generic static layer.
 
 The audit is local and read only. It accepts only bounded regular JavaScript/TypeScript source files, does not follow symbolic links, fails closed on malformed or uninspectable evidence files, emits no source payloads, and performs no network calls, subprocess execution, runtime environment inspection, webhook delivery, provider mutation, or repository mutation.
+
+### Payment integrity audit
+
+`bun run audit:payment-integrity` evaluates an optional, provider-neutral payment engineering profile. It does not encode application pricing, booking rules, provider account identities, capture policy, or canonical business truth. Those remain private project configuration.
+
+Each payment profile explicitly identifies the provider-request call and seven engineering controls: idempotency, persisted provider binding, amount integrity, currency integrity, refund linkage, capture state, and reconciliation. Every control chooses `FAIL`, `WARN`, or `IGNORE` and binds exact TypeScript/JavaScript call evidence.
+
+The four controls that must exist before an external payment request — idempotency, provider binding, amount integrity, and currency integrity — use ordered AST evidence. The configured control call must appear before every configured provider-request occurrence in the same operation file. A matching call in an unrelated helper may prove structural presence, but cannot prove pre-provider ordering.
+
+Webhook verification composes with the canonical Webhook Safety Policy rather than implementing a second signature scanner. A payment webhook binding is satisfied only when the referenced webhook has structural `signatureVerification` evidence in the canonical webhook audit.
+
+```json
+{
+  "version": 1,
+  "payments": [
+    {
+      "id": "payment-create",
+      "providerRequest": {
+        "operationFiles": ["src/payments/create.ts"],
+        "callees": ["provider.createPayment"]
+      },
+      "controls": {
+        "idempotency": { "severity": "FAIL", "evidenceFiles": ["src/payments/create.ts"], "callees": ["persistIdempotency"] },
+        "providerBinding": { "severity": "FAIL", "evidenceFiles": ["src/payments/create.ts"], "callees": ["persistProviderBinding"] },
+        "amountIntegrity": { "severity": "FAIL", "evidenceFiles": ["src/payments/create.ts"], "callees": ["persistAmount"] },
+        "currencyIntegrity": { "severity": "FAIL", "evidenceFiles": ["src/payments/create.ts"], "callees": ["persistCurrency"] },
+        "refundLinkage": { "severity": "WARN", "evidenceFiles": ["src/payments/refunds.ts"], "callees": ["linkRefund"] },
+        "captureState": { "severity": "FAIL", "evidenceFiles": ["src/payments/state.ts"], "callees": ["transitionCapture"] },
+        "reconciliation": { "severity": "FAIL", "evidenceFiles": ["src/payments/reconcile.ts"], "callees": ["enqueueReconciliation"] }
+      },
+      "webhookVerification": { "severity": "FAIL", "webhookIds": ["payment-webhook"] }
+    }
+  ]
+}
+```
+
+```sh
+bun run audit:payment-integrity -- \
+  --root /path/to/repository \
+  --policy /private/path/payment-integrity-policy.json \
+  --webhook-policy /private/path/webhook-safety-policy.json \
+  --json
+```
+
+The evidence is intentionally bounded. Static call presence and same-file source order do not prove atomicity, database uniqueness, immutability, persisted values, provider behavior, transaction boundaries, or valid runtime state transitions. Stronger database and integration evidence is still required for those claims. `IGNORE` remains visible as a warning and makes no integrity claim.
+
+The audit is local and read only. It does not send payment requests, capture or refund money, inspect runtime environment values, execute source code, call providers, or mutate repository or production state. Source payloads are not copied into reports.
