@@ -109,8 +109,9 @@ Core principles:
 * Running Docker container revision-label collector and live local process socket collector: merged.
 * Runtime evidence freshness policy with stale and future-evidence warnings: merged and active in deployment, repository, and ecosystem status flows.
 * Provider-neutral Runtime Health Evidence v1 and explicit freshness/check policy audit, intentionally separate from deployment identity: merged.
-* HTTPS-first synthetic production smoke runner with GET/HEAD-only requests, no redirects or credentials, bounded JSON assertions, and explicit read-only endpoint ownership boundary: implementation complete on the active capability branch.
-* Frontend and remaining operational assurance capabilities remain open.
+* HTTPS-first synthetic production smoke runner with GET/HEAD-only requests, no redirects or credentials, bounded JSON assertions, and explicit read-only endpoint ownership boundary: merged.
+* Browser-based frontend runtime checks for route status, console/page errors, failed requests/assets, hydration markers, CSP violations, and blocked mutation attempts: merged.
+* Performance budgets and the remaining operational assurance capabilities remain open.
 
 35. Add runtime evidence collectors as separate adapters that emit Runtime Evidence Contract documents.
 36. Support local Git checkout evidence while clearly labeling it as checkout evidence, not process identity.
