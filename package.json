@@ -98,7 +98,8 @@
     "audit:webhook-safety": "node scripts/audit-webhook-safety.js",
     "audit:payment-integrity": "node scripts/audit-payment-integrity.js",
     "booking:integrity:evidence": "node scripts/booking-integrity-evidence.js",
-    "audit:booking-integrity": "node scripts/audit-booking-integrity.js"
+    "audit:booking-integrity": "node scripts/audit-booking-integrity.js",
+    "audit:jobs": "node scripts/audit-job-scheduler.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",

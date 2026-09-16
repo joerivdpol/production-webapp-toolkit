@@ -1571,3 +1571,43 @@ bun run audit:booking-integrity -- \
 A passing report means only that configured static control calls were found and the supplied commit-bound empirical metrics stayed within explicit thresholds. It does not independently prove database atomicity, lock correctness, isolation level, transaction boundaries, real inventory capacity, expiry semantics, or real-world booking correctness. Missing required evidence, commit drift, oversell, duplicates, unreleased claims, retry duplicates, and timezone mismatches remain separate findings.
 
 Both commands are local and read only. They do not execute bookings, mutate inventory, connect to databases, call providers, inspect runtime environment values, or copy source payloads into reports.
+
+### Job and scheduler audit
+
+`bun run audit:jobs` evaluates explicit scheduled-job policy without assuming a particular scheduler, queue, framework, or cron dialect. Every job declares an opaque schedule expression plus an explicit valid IANA timezone, handler files, structural scheduler-registration evidence, overlap posture, and policies for locking, timeout, retries, and dead-letter handling.
+
+Schedule expressions are deliberately not parsed because syntax and semantics vary by scheduler. The audit proves only that the schedule text is explicit and that timezone is not an implicit local/system clock. A valid timezone does not prove DST behavior or application-specific calendar correctness.
+
+Overlap policy is explicit. `forbid` requires structural locking-call evidence; otherwise the job fails `job-overlap-unguarded`. `allow` is accepted only as a visible warning and makes no non-overlap claim. Locking, timeout, retry, and dead-letter controls each choose `FAIL`, `WARN`, or `IGNORE` and bind exact AST call evidence.
+
+```json
+{
+  "version": 1,
+  "jobs": [
+    {
+      "id": "nightly-sync",
+      "schedule": { "expression": "0 2 * * *", "timezone": "Asia/Jakarta" },
+      "handlerFiles": ["src/jobs/nightly.ts"],
+      "registration": { "evidenceFiles": ["src/jobs/register.ts"], "callees": ["scheduler.register"] },
+      "overlap": { "mode": "forbid" },
+      "controls": {
+        "locking": { "severity": "FAIL", "evidenceFiles": ["src/jobs/nightly.ts"], "callees": ["withJobLock"] },
+        "timeout": { "severity": "FAIL", "evidenceFiles": ["src/jobs/nightly.ts"], "callees": ["withTimeout"] },
+        "retries": { "severity": "FAIL", "evidenceFiles": ["src/jobs/nightly.ts"], "callees": ["retryJob"] },
+        "deadLetter": { "severity": "WARN", "evidenceFiles": ["src/jobs/nightly.ts"], "callees": ["sendDeadLetter"] }
+      }
+    }
+  ]
+}
+```
+
+```sh
+bun run audit:jobs -- \
+  --root /path/to/repository \
+  --policy /private/path/job-scheduler-policy.json \
+  --json
+```
+
+The audit uses canonical TypeScript AST call evidence, so comments and strings do not satisfy controls. It supports centralized wrappers by allowing evidence files to differ from handler files. This remains structural evidence only: it does not independently prove scheduler delivery, distributed lock correctness, timeout enforcement, retry backoff, dead-letter durability, or actual runtime non-overlap.
+
+The capability is local and read only. It does not start jobs, inspect runtime environment values, contact schedulers or queues, execute source code, or mutate repository or production state. Source payloads are not copied into reports.
