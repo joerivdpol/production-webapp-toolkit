@@ -6,12 +6,13 @@ import { pathToFileURL } from "node:url";
 
 import { inspectRepositoryStatus } from "./audit-repository-status.js";
 import { isFullObjectId, validateEvidenceFreshnessPolicy, validateRuntimeIdentityPolicy } from "./audit-deployment-verification.js";
+import { validateCiVerificationPolicy } from "./audit-ci-verification.js";
 
 const CONFIG_VERSION = 1;
 const USAGE =
   "Usage: node scripts/audit-ecosystem-status.js <repository> [repository...] [--json] | --config <file> [--json]";
 
-/** @typedef {{ name?: string, target: string, expectedRef?: string | null, expectedCommit?: string | null, compareRef?: string | null, deployedCommit?: string | null, evidenceFile?: string | null, maxEvidenceAgeSeconds?: number | null, evaluatedAt?: string | null, expectedRuntimeName?: string | null, expectedRuntimeEnvironment?: string | null }} RepositoryInput */
+/** @typedef {{ name?: string, target: string, expectedRef?: string | null, expectedCommit?: string | null, compareRef?: string | null, deployedCommit?: string | null, evidenceFile?: string | null, maxEvidenceAgeSeconds?: number | null, evaluatedAt?: string | null, expectedRuntimeName?: string | null, expectedRuntimeEnvironment?: string | null, ciEvidenceFile?: string | null, ciExpectedCommit?: string | null, requiredCiChecks?: string[] | null }} RepositoryInput */
 
 /** @param {unknown} error */
 function errorDetail(error) {
@@ -59,7 +60,7 @@ export function parseEcosystemConfig(value, baseDirectory = process.cwd()) {
       return { error: `config repository ${index + 1} must be an object` };
     }
 
-    const repository = /** @type {{ name?: unknown, path?: unknown, expectedRef?: unknown, expectedCommit?: unknown, compareRef?: unknown, deployedCommit?: unknown, evidenceFile?: unknown, maxEvidenceAgeSeconds?: unknown, evaluatedAt?: unknown, expectedRuntimeName?: unknown, expectedRuntimeEnvironment?: unknown }} */ (entry);
+    const repository = /** @type {{ name?: unknown, path?: unknown, expectedRef?: unknown, expectedCommit?: unknown, compareRef?: unknown, deployedCommit?: unknown, evidenceFile?: unknown, maxEvidenceAgeSeconds?: unknown, evaluatedAt?: unknown, expectedRuntimeName?: unknown, expectedRuntimeEnvironment?: unknown, ciEvidenceFile?: unknown, ciExpectedCommit?: unknown, requiredCiChecks?: unknown }} */ (entry);
     if (typeof repository.path !== "string" || repository.path.trim().length === 0) {
       return { error: `config repository ${index + 1} must have a non-empty path` };
     }
@@ -107,6 +108,19 @@ export function parseEcosystemConfig(value, baseDirectory = process.cwd()) {
       return { error: `config repository ${index + 1} runtime identity policy requires evidenceFile` };
     }
 
+    const anyCi = repository.ciEvidenceFile !== undefined || repository.ciExpectedCommit !== undefined || repository.requiredCiChecks !== undefined;
+    let ciPolicy = null;
+    if (anyCi) {
+      if (typeof repository.ciEvidenceFile !== "string" || repository.ciEvidenceFile.trim().length === 0) {
+        return { error: `config repository ${index + 1} CI verification requires a non-empty ciEvidenceFile` };
+      }
+      const result = validateCiVerificationPolicy(repository.ciExpectedCommit, repository.requiredCiChecks);
+      if (!result.ok) {
+        return { error: `config repository ${index + 1} ${result.error.detail}` };
+      }
+      ciPolicy = result.policy;
+    }
+
     const target = path.resolve(baseDirectory, repository.path);
     if (targets.has(target)) {
       return { error: `config contains duplicate repository target: ${target}` };
@@ -124,6 +138,9 @@ export function parseEcosystemConfig(value, baseDirectory = process.cwd()) {
       evaluatedAt: freshnessPolicy.policy?.evaluatedAt ?? null,
       expectedRuntimeName: runtimeIdentityPolicy.policy?.expectedRuntimeName ?? null,
       expectedRuntimeEnvironment: runtimeIdentityPolicy.policy?.expectedRuntimeEnvironment ?? null,
+      ciEvidenceFile: typeof repository.ciEvidenceFile === "string" ? path.resolve(baseDirectory, repository.ciEvidenceFile) : null,
+      ciExpectedCommit: ciPolicy?.expectedCommit ?? null,
+      requiredCiChecks: ciPolicy?.requiredChecks ?? null,
     };
     if (typeof repository.name === "string") normalized.name = repository.name;
     repositories.push(normalized);
@@ -198,6 +215,7 @@ export function readEcosystemConfig(configPath) {
 function failedRepositoryStatus(repository, error) {
   const baselineConfigured = Boolean(repository.expectedRef || repository.expectedCommit);
   const deploymentConfigured = Boolean(repository.deployedCommit || repository.evidenceFile);
+  const ciConfigured = Boolean(repository.ciEvidenceFile || repository.ciExpectedCommit || repository.requiredCiChecks?.length);
   const detail = `repository status inspection could not run reliably: ${errorDetail(error)}`;
   const baseline = baselineConfigured
     ? {
@@ -251,20 +269,48 @@ function failedRepositoryStatus(repository, error) {
         checks: [],
       };
 
+  const ci = ciConfigured
+    ? {
+        configured: true,
+        status: "FAIL",
+        technicalStatus: "FAIL",
+        overallStatus: "FAIL",
+        commitStatus: "UNVERIFIED",
+        checksStatus: "UNVERIFIED",
+        expectedCommit: repository.ciExpectedCommit ?? null,
+        evidenceCommit: null,
+        requiredChecks: [],
+        evidence: null,
+      }
+    : {
+        configured: false,
+        status: "NOT_CONFIGURED",
+        technicalStatus: "PASS",
+        overallStatus: null,
+        commitStatus: null,
+        checksStatus: null,
+        expectedCommit: null,
+        evidenceCommit: null,
+        requiredChecks: [],
+        evidence: null,
+      };
+
   return {
     root: path.resolve(repository.target),
     profile: "unknown",
     baselineConfigured,
     deploymentConfigured,
+    ciConfigured,
     dimensions: {
       quality: { status: "FAIL", technicalStatus: "FAIL", profile: "unknown", detail },
       governance: { status: "FAIL", technicalStatus: "FAIL", checks: [{ id: "ecosystem-inspection", severity: "FAIL", detail }] },
       baseline,
       deployment,
+      ci,
     },
     technicalStatus: "FAIL",
     overallStatus: "FAIL",
-    summary: { quality: "FAIL", governance: "FAIL", baseline: baseline.status, deployment: deployment.status },
+    summary: { quality: "FAIL", governance: "FAIL", baseline: baseline.status, deployment: deployment.status, ci: ci.status },
   };
 }
 
@@ -294,6 +340,9 @@ export function inspectEcosystemStatus(inputs, metadata) {
         evaluatedAt: input.evaluatedAt ?? null,
         expectedRuntimeName: input.expectedRuntimeName ?? null,
         expectedRuntimeEnvironment: input.expectedRuntimeEnvironment ?? null,
+        ciEvidenceFile: input.ciEvidenceFile ?? null,
+        ciExpectedCommit: input.ciExpectedCommit ?? null,
+        requiredCiChecks: input.requiredCiChecks ?? null,
       });
     } catch (error) {
       status = failedRepositoryStatus(input, error);
@@ -314,6 +363,7 @@ export function inspectEcosystemStatus(inputs, metadata) {
     governance: { pass: 0, warn: 0, fail: 0 },
     baseline: { pass: 0, warn: 0, fail: 0, notConfigured: 0 },
     deployment: { pass: 0, warn: 0, fail: 0, notConfigured: 0 },
+    ci: { pass: 0, warn: 0, fail: 0, notConfigured: 0 },
     profiles: { webapp: 0, "python-service": 0, unknown: 0 },
   };
 
@@ -326,6 +376,8 @@ export function inspectEcosystemStatus(inputs, metadata) {
     increment(summary.baseline, baselineStatus === "NOT_CONFIGURED" ? "notConfigured" : baselineStatus.toLowerCase());
     const deploymentStatus = repository.dimensions.deployment.status;
     increment(summary.deployment, deploymentStatus === "NOT_CONFIGURED" ? "notConfigured" : deploymentStatus.toLowerCase());
+    const ciStatus = repository.dimensions.ci.status;
+    increment(summary.ci, ciStatus === "NOT_CONFIGURED" ? "notConfigured" : ciStatus.toLowerCase());
     increment(summary.profiles, repository.profile);
   }
 
@@ -360,6 +412,15 @@ function deploymentLabel(deployment) {
   return parts.join("/");
 }
 
+/** @param {unknown} ci */
+function ciLabel(ci) {
+  const value = /** @type {{ configured?: boolean, status?: string, commitStatus?: string | null, checksStatus?: string | null }} */ (ci);
+  if (!value.configured) return "NOT_CONFIGURED";
+  const commit = value.commitStatus ?? "UNVERIFIED";
+  const checks = value.checksStatus ?? "UNVERIFIED";
+  return value.status === "FAIL" ? `FAIL/${commit}/${checks}` : `${commit}/${checks}`;
+}
+
 /** @param {ReturnType<typeof inspectEcosystemStatus>} report */
 export function formatEcosystemStatus(report) {
   /** @type {string[][]} */
@@ -370,9 +431,10 @@ export function formatEcosystemStatus(report) {
     repository.dimensions.governance.status,
     baselineLabel(repository.dimensions.baseline),
     deploymentLabel(repository.dimensions.deployment),
+    ciLabel(repository.dimensions.ci),
     repository.overallStatus,
   ]);
-  const headers = ["REPOSITORY", "PROFILE", "QUALITY", "GOVERNANCE", "BASELINE", "DEPLOYMENT", "OVERALL"];
+  const headers = ["REPOSITORY", "PROFILE", "QUALITY", "GOVERNANCE", "BASELINE", "DEPLOYMENT", "CI", "OVERALL"];
   const widths = headers.map((header, index) => Math.max(header.length, ...rows.map((row) => (row[index] ?? "").length)) + 2);
   /** @param {string[]} row */
   const render = (row) => row.map((cell, index) => cell.padEnd(widths[index] ?? 0)).join("").trimEnd();
