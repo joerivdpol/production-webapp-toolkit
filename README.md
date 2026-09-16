@@ -288,6 +288,41 @@ GitHub Actions workflows receive a separate leakage check. Normal secret injecti
 
 The scanner does not follow tracked symlinks, so a repository cannot cause this audit to read a linked file outside the repository. Credentialed URLs to reserved test hosts such as localhost and reserved test domains remain valid fixtures. This gate complements Environment Contract and client-exposure auditing: those reason about declared public/server policy, while public safety looks for tracked credential material and high-confidence leakage patterns.
 
+### Database migration safety audit
+
+`bun run audit:migration-safety` performs a local read-only static safety review of explicit SQL migration roots. It does not connect to a database, execute migrations, call Git, infer which files were applied, or modify repository content.
+
+```sh
+bun run audit:migration-safety /path/to/repository \
+  --root supabase/migrations
+
+bun run audit:migration-safety /path/to/repository \
+  --root supabase/migrations \
+  --manifest /private/path/applied-migrations.json
+```
+
+The SQL scanner is comment-, string-, quoted-identifier-, and dollar-body-aware so dangerous words in documentation, literals, or stored function bodies do not become migration-time findings. Static risk findings are primarily `WARN`: destructive DROP DDL, TRUNCATE, unbounded DELETE, enum value additions, non-concurrent index creation, column type changes, NOT NULL validation, validated foreign keys, NOT NULL columns without defaults, volatile defaults, explicit table locks, VACUUM FULL, and REINDEX. These warnings identify operational risk without pretending that every intentional migration is forbidden.
+
+A few conditions are blocking `FAIL` because they are structurally unsafe rather than merely risky: duplicate migration IDs, symbolic-link migration files, binary SQL, unbalanced explicit transaction boundaries, and PostgreSQL `CREATE INDEX CONCURRENTLY` inside an explicit transaction. Common timestamp and Flyway-style migration IDs are recognized; unrecognized IDs, implausible timestamp IDs, inconsistent numeric-ID widths, and duplicate basenames across roots are visible ordering/readiness warnings.
+
+Applied-history integrity is optional but explicit. A version 1 manifest lists repository-relative migration paths plus SHA256 hashes:
+
+```json
+{
+  "version": 1,
+  "migrations": [
+    {
+      "path": "supabase/migrations/20260916120000_create_users.sql",
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    }
+  ]
+}
+```
+
+The toolkit never assumes that every migration file is applied. Manifest entries are caller-supplied applied-history evidence. A manifested migration that disappears or changes hash is blocking `FAIL`; current migrations not present in the manifest are reported as `NEW` and are not treated as history corruption. Without a manifest the history dimension is `NOT_CONFIGURED` and the audit remains `WARN`, because modified applied history cannot be verified.
+
+Migration SQL contents are never emitted in JSON or human reports; only file paths, hashes, IDs, classification metadata, and generic risk details are returned. SQL above the bounded static scan size is still hashed but reports `WARN` because its contents were not risk-scanned. `PASS` and `WARN` exit 0; blocking migration findings, invalid inputs, or technical inspection failures exit 1.
+
 ## Repository status
 
 `bun run audit:repository-status /path/to/repository` combines the existing profiled quality, offline Git-governance, optional production-baseline, optional deployment-verification, and optional CI-verification audits into one read-only scorecard. It composes their canonical results rather than reimplementing their rules or inferring production truth.
