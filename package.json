@@ -45,7 +45,10 @@
     "audit:migration-safety": "node scripts/audit-migration-safety.js",
     "schema:snapshot": "node scripts/database-schema-snapshot.js",
     "schema:snapshot:postgres:collect": "node scripts/collect-postgres-schema-snapshot.js",
-    "audit:schema-drift": "node scripts/audit-database-schema-drift.js"
+    "audit:schema-drift": "node scripts/audit-database-schema-drift.js",
+    "security:snapshot": "node scripts/postgres-security-snapshot.js",
+    "security:snapshot:postgres:collect": "node scripts/collect-postgres-security-snapshot.js",
+    "audit:postgres-security": "node scripts/audit-postgres-security.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
