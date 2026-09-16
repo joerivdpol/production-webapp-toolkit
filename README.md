@@ -12,7 +12,7 @@ The changed-files strategy acts as a ratchet. [`scripts/lint-changed.js`](script
 
 ## Quick start
 
-Requires Bun and Node.js 20 or newer.
+The reference toolchain is Node.js 24.21.0 and Bun 1.3.14. CI uses the same pinned versions. The supported Node.js engine range for v1.1 is 24.x.
 
 ```sh
 bun install --frozen-lockfile
@@ -269,9 +269,9 @@ See [`docs/standard.md`](docs/standard.md) for the architecture and required/opt
 
 MIT
 
-## v1 capability surface
+## v1.1 capability surface
 
-Production Webapp Toolkit v1 supports repository profiles and profiled auditing for TypeScript webapps and Python services.
+Production Webapp Toolkit v1.1 supports repository profiles and profiled auditing for TypeScript webapps and Python services, plus explicit Git governance, production baselines, runtime evidence, deployment verification, repository status, and ecosystem status.
 
 It provides dependency drift auditing across repositories, including version differences and reproducibility gaps.
 
@@ -279,7 +279,7 @@ It provides public repository safety checks for tracked sensitive files and secr
 
 It provides architecture compliance through external versioned policy files. Organization-specific policy remains outside this public toolkit.
 
-The toolkit also provides safe repository bootstrap, remediation planning and execution, ecosystem auditing, and self-contained v1 release-readiness validation.
+The toolkit also provides safe repository bootstrap, remediation planning and execution, dependency and architecture auditing, and self-contained v1.1 release-readiness validation. Runtime Evidence may be checked for freshness and explicit runtime identity without inferring production truth or authentication.
 
 Useful commands:
 
@@ -293,3 +293,5 @@ Useful commands:
 - bun run remediation:plan /path/to/repository
 - bun run remediation:apply /path/to/repository --dry-run
 - bun run audit:release .
+- bun run audit:release . --expected-version 1.1.0
+- bun run release:verify
