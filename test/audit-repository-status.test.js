@@ -470,6 +470,96 @@ test("evidence file input is read only and direct callers cannot forge runtime p
   assert.equal(forgedEvidence.authenticated, false);
 });
 
+test("repository status preserves fresh runtime evidence as full PASS", () => {
+  const { root, initial } = createWebapp();
+  assert.ok(initial);
+  const file = writeEvidenceFile(runtimeEvidence(initial));
+  const report = inspectRepositoryStatus(root, {
+    expectedRef: "main",
+    evidenceFile: file,
+    maxEvidenceAgeSeconds: 3600,
+    evaluatedAt: "2026-09-03T01:00:00Z",
+  });
+
+  assert.equal(report.dimensions.deployment.deploymentStatus, "MATCH");
+  assert.equal(report.dimensions.deployment.freshness.status, "FRESH");
+  assert.equal(report.dimensions.deployment.freshness.ageSeconds, 3600);
+  assert.equal(report.dimensions.deployment.status, "PASS");
+  assert.equal(report.overallStatus, "PASS");
+  assert.match(formatRepositoryStatus(report), /DEPLOYMENT\s+PASS \(MATCH; FRESH\)/);
+});
+
+test("stale and future runtime evidence keep deployment MATCH but warn repository readiness", () => {
+  const { root, initial } = createWebapp();
+  assert.ok(initial);
+  const file = writeEvidenceFile(runtimeEvidence(initial));
+  const stale = inspectRepositoryStatus(root, {
+    expectedRef: "main",
+    evidenceFile: file,
+    maxEvidenceAgeSeconds: 3600,
+    evaluatedAt: "2026-09-03T02:00:00Z",
+  });
+  const future = inspectRepositoryStatus(root, {
+    expectedRef: "main",
+    evidenceFile: file,
+    maxEvidenceAgeSeconds: 3600,
+    evaluatedAt: "2026-09-02T23:00:00Z",
+  });
+
+  for (const report of [stale, future]) {
+    assert.equal(report.dimensions.deployment.deploymentStatus, "MATCH");
+    assert.equal(report.dimensions.deployment.status, "WARN");
+    assert.equal(report.technicalStatus, "PASS");
+    assert.equal(report.overallStatus, "WARN");
+  }
+  const staleFreshness = stale.dimensions.deployment.freshness;
+  const futureFreshness = future.dimensions.deployment.freshness;
+  assert.ok(staleFreshness);
+  assert.ok(futureFreshness);
+  assert.equal(staleFreshness.status, "STALE");
+  assert.equal(staleFreshness.ageSeconds, 7200);
+  assert.equal(futureFreshness.status, "FUTURE");
+  assert.equal(futureFreshness.ageSeconds, -3600);
+  assert.match(formatRepositoryStatus(stale), /DEPLOYMENT\s+WARN \(MATCH; STALE\)/);
+});
+
+test("repository status freshness policy is explicit and evidence-file only", () => {
+  const { root, initial } = createWebapp();
+  assert.ok(initial);
+  const file = writeEvidenceFile(runtimeEvidence(initial));
+  const invalidCliInputs = [
+    [root, "--expected-ref", "main", "--evidence-file", file, "--max-evidence-age-seconds", "3600"],
+    [root, "--expected-ref", "main", "--evidence-file", file, "--evaluated-at", "2026-09-03T01:00:00Z"],
+    [root, "--expected-ref", "main", "--deployed-commit", initial, "--max-evidence-age-seconds", "3600", "--evaluated-at", "2026-09-03T01:00:00Z"],
+    [root, "--expected-ref", "main", "--evidence-file", file, "--max-evidence-age-seconds", "0", "--evaluated-at", "2026-09-03T01:00:00Z"],
+    [root, "--expected-ref", "main", "--evidence-file", file, "--max-evidence-age-seconds", "3600", "--evaluated-at", "2026-09-03T01:00:00"],
+  ];
+  for (const args of invalidCliInputs) assert.equal(runCli(...args).status, 1);
+
+  const valid = runCli(
+    root,
+    "--expected-ref", "main",
+    "--evidence-file", file,
+    "--max-evidence-age-seconds", "3600",
+    "--evaluated-at", "2026-09-03T01:00:00Z",
+    "--json",
+  );
+  assert.equal(valid.status, 0);
+  assert.equal(JSON.parse(valid.stdout).dimensions.deployment.freshness.status, "FRESH");
+
+  assert.throws(() => inspectRepositoryStatus(root, {
+    expectedRef: "main",
+    evidenceFile: file,
+    maxEvidenceAgeSeconds: 3600,
+  }), /requires both/);
+  assert.throws(() => inspectRepositoryStatus(root, {
+    expectedRef: "main",
+    deployedCommit: initial,
+    maxEvidenceAgeSeconds: 3600,
+    evaluatedAt: "2026-09-03T01:00:00Z",
+  }), /requires Runtime Evidence file/);
+});
+
 test("configured deployment technical failure propagates to repository technical failure", () => {
   const { root } = createWebapp({ git: false });
   const fullCommit = "0123456789abcdef0123456789abcdef01234567";
@@ -488,7 +578,8 @@ test("repository status delegates deployment validation and comparison to canoni
   assert.match(source, /inspectDeploymentVerification/);
   assert.match(source, /inspectDeploymentVerificationFromEvidenceFile/);
   assert.match(source, /isFullObjectId/);
+  assert.match(source, /validateEvidenceFreshnessPolicy/);
   assert.doesNotMatch(source, /validateRuntimeEvidence/);
   assert.doesNotMatch(source, /[0-9a-fA-F]\{40\}/);
-  assert.doesNotMatch(source, /spawnSync|execFileSync|fetch\(|https?:|ssh|systemctl|docker|process\.env|writeFile/);
+  assert.doesNotMatch(source, /spawnSync|execFileSync|fetch\(|https?:|ssh|systemctl|docker|process\.env|Date\.now|writeFile/);
 });

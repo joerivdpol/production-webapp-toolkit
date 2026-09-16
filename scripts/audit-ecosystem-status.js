@@ -5,13 +5,13 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { inspectRepositoryStatus } from "./audit-repository-status.js";
-import { isFullObjectId } from "./audit-deployment-verification.js";
+import { isFullObjectId, validateEvidenceFreshnessPolicy } from "./audit-deployment-verification.js";
 
 const CONFIG_VERSION = 1;
 const USAGE =
   "Usage: node scripts/audit-ecosystem-status.js <repository> [repository...] [--json] | --config <file> [--json]";
 
-/** @typedef {{ name?: string, target: string, expectedRef?: string | null, expectedCommit?: string | null, compareRef?: string | null, deployedCommit?: string | null, evidenceFile?: string | null }} RepositoryInput */
+/** @typedef {{ name?: string, target: string, expectedRef?: string | null, expectedCommit?: string | null, compareRef?: string | null, deployedCommit?: string | null, evidenceFile?: string | null, maxEvidenceAgeSeconds?: number | null, evaluatedAt?: string | null }} RepositoryInput */
 
 /** @param {unknown} error */
 function errorDetail(error) {
@@ -59,7 +59,7 @@ export function parseEcosystemConfig(value, baseDirectory = process.cwd()) {
       return { error: `config repository ${index + 1} must be an object` };
     }
 
-    const repository = /** @type {{ name?: unknown, path?: unknown, expectedRef?: unknown, expectedCommit?: unknown, compareRef?: unknown, deployedCommit?: unknown, evidenceFile?: unknown }} */ (entry);
+    const repository = /** @type {{ name?: unknown, path?: unknown, expectedRef?: unknown, expectedCommit?: unknown, compareRef?: unknown, deployedCommit?: unknown, evidenceFile?: unknown, maxEvidenceAgeSeconds?: unknown, evaluatedAt?: unknown }} */ (entry);
     if (typeof repository.path !== "string" || repository.path.trim().length === 0) {
       return { error: `config repository ${index + 1} must have a non-empty path` };
     }
@@ -86,6 +86,16 @@ export function parseEcosystemConfig(value, baseDirectory = process.cwd()) {
     if (typeof repository.deployedCommit === "string" && !isFullObjectId(repository.deployedCommit)) {
       return { error: `config repository ${index + 1} deployedCommit must be a full 40- or 64-character hexadecimal Git object ID` };
     }
+    const freshnessPolicy = validateEvidenceFreshnessPolicy(
+      repository.maxEvidenceAgeSeconds,
+      repository.evaluatedAt,
+    );
+    if (!freshnessPolicy.ok) {
+      return { error: `config repository ${index + 1} ${freshnessPolicy.error.detail}` };
+    }
+    if (freshnessPolicy.policy !== null && repository.evidenceFile === undefined) {
+      return { error: `config repository ${index + 1} freshness policy requires evidenceFile` };
+    }
 
     const target = path.resolve(baseDirectory, repository.path);
     if (targets.has(target)) {
@@ -100,6 +110,8 @@ export function parseEcosystemConfig(value, baseDirectory = process.cwd()) {
       compareRef: typeof repository.compareRef === "string" ? repository.compareRef : null,
       deployedCommit: typeof repository.deployedCommit === "string" ? repository.deployedCommit : null,
       evidenceFile: typeof repository.evidenceFile === "string" ? path.resolve(baseDirectory, repository.evidenceFile) : null,
+      maxEvidenceAgeSeconds: freshnessPolicy.policy?.maxEvidenceAgeSeconds ?? null,
+      evaluatedAt: freshnessPolicy.policy?.evaluatedAt ?? null,
     };
     if (typeof repository.name === "string") normalized.name = repository.name;
     repositories.push(normalized);
@@ -206,6 +218,7 @@ function failedRepositoryStatus(repository, error) {
         expectedResolvedCommit: null,
         deployedCommit: repository.deployedCommit ?? null,
         evidence: null,
+        freshness: null,
         checks: [{ id: "ecosystem-inspection", severity: "FAIL", detail }],
       }
     : {
@@ -220,6 +233,7 @@ function failedRepositoryStatus(repository, error) {
         expectedResolvedCommit: null,
         deployedCommit: null,
         evidence: null,
+        freshness: null,
         checks: [],
       };
 
@@ -262,6 +276,8 @@ export function inspectEcosystemStatus(inputs, metadata) {
         compareRef: input.compareRef ?? null,
         deployedCommit: input.deployedCommit ?? null,
         evidenceFile: input.evidenceFile ?? null,
+        maxEvidenceAgeSeconds: input.maxEvidenceAgeSeconds ?? null,
+        evaluatedAt: input.evaluatedAt ?? null,
       });
     } catch (error) {
       status = failedRepositoryStatus(input, error);
@@ -319,9 +335,13 @@ function baselineLabel(baseline) {
 
 /** @param {unknown} deployment */
 function deploymentLabel(deployment) {
-  const value = /** @type {{ configured?: boolean, status?: string, deploymentStatus?: string | null }} */ (deployment);
+  const value = /** @type {{ configured?: boolean, status?: string, deploymentStatus?: string | null, freshness?: { configured?: boolean, status?: string } | null }} */ (deployment);
   if (!value.configured) return "NOT_CONFIGURED";
-  return value.status === "FAIL" ? `FAIL/${value.deploymentStatus ?? "UNVERIFIED"}` : value.deploymentStatus ?? value.status ?? "UNVERIFIED";
+  if (value.status === "FAIL") return `FAIL/${value.deploymentStatus ?? "UNVERIFIED"}`;
+  const deploymentStatus = value.deploymentStatus ?? value.status ?? "UNVERIFIED";
+  return value.freshness?.configured
+    ? `${deploymentStatus}/${value.freshness.status ?? "UNVERIFIED"}`
+    : deploymentStatus;
 }
 
 /** @param {ReturnType<typeof inspectEcosystemStatus>} report */

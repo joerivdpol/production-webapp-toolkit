@@ -5,10 +5,13 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { inspectProductionBaseline } from "./audit-production-baseline.js";
-import { validateRuntimeEvidence } from "./runtime-evidence.js";
+import { isAbsoluteIsoTimestamp, validateRuntimeEvidence } from "./runtime-evidence.js";
 
 /** @typedef {"PASS" | "WARN" | "FAIL"} Severity */
+/** @typedef {"FRESH" | "STALE" | "FUTURE" | "NOT_CONFIGURED" | "NOT_APPLICABLE"} FreshnessStatus */
 /** @typedef {{ id: string, severity: Severity, detail: string }} DeploymentCheck */
+/** @typedef {{ configured: boolean, status: FreshnessStatus, collectedAt: string | null, evaluatedAt: string | null, ageSeconds: number | null, maxAgeSeconds: number | null }} EvidenceFreshness */
+/** @typedef {{ maxEvidenceAgeSeconds: number, evaluatedAt: string }} EvidenceFreshnessPolicy */
 /**
  * @typedef {{
  *   expectedRef?: string | null,
@@ -28,6 +31,7 @@ import { validateRuntimeEvidence } from "./runtime-evidence.js";
  *   deployedCommit: string | null,
  *   evidence: DeploymentEvidence,
  *   deploymentStatus: "MATCH" | "MISMATCH" | "UNVERIFIED",
+ *   freshness: EvidenceFreshness,
  *   technicalStatus: "PASS" | "FAIL",
  *   overallStatus: "PASS" | "WARN" | "FAIL",
  *   checks: DeploymentCheck[]
@@ -39,14 +43,106 @@ export function isFullObjectId(value) {
   return /^[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?$/.test(value);
 }
 
+/** @param {DeploymentEvidence} evidence */
+function defaultFreshness(evidence) {
+  if (evidence.type === "runtime-evidence") {
+    return {
+      configured: false,
+      status: /** @type {FreshnessStatus} */ ("NOT_CONFIGURED"),
+      collectedAt: evidence.collectedAt,
+      evaluatedAt: null,
+      ageSeconds: null,
+      maxAgeSeconds: null,
+    };
+  }
+  return {
+    configured: false,
+    status: /** @type {FreshnessStatus} */ ("NOT_APPLICABLE"),
+    collectedAt: null,
+    evaluatedAt: null,
+    ageSeconds: null,
+    maxAgeSeconds: null,
+  };
+}
+
+/**
+ * @param {unknown} maxEvidenceAgeSeconds
+ * @param {unknown} evaluatedAt
+ * @returns {{ ok: true, policy: EvidenceFreshnessPolicy | null } | { ok: false, error: { id: string, detail: string } }}
+ */
+export function validateEvidenceFreshnessPolicy(maxEvidenceAgeSeconds, evaluatedAt) {
+  const absent = maxEvidenceAgeSeconds === null || maxEvidenceAgeSeconds === undefined;
+  const timeAbsent = evaluatedAt === null || evaluatedAt === undefined;
+  if (absent && timeAbsent) return { ok: true, policy: null };
+  if (absent || timeAbsent) {
+    return { ok: false, error: { id: "freshness-policy-incomplete", detail: "freshness policy requires both maxEvidenceAgeSeconds and evaluatedAt" } };
+  }
+  if (typeof maxEvidenceAgeSeconds !== "number" || !Number.isSafeInteger(maxEvidenceAgeSeconds) || maxEvidenceAgeSeconds <= 0) {
+    return { ok: false, error: { id: "freshness-max-age-invalid", detail: "maxEvidenceAgeSeconds must be a positive safe integer" } };
+  }
+  if (typeof evaluatedAt !== "string" || !isAbsoluteIsoTimestamp(evaluatedAt)) {
+    return { ok: false, error: { id: "freshness-evaluated-at-invalid", detail: "evaluatedAt must be a valid absolute ISO 8601 timestamp with timezone" } };
+  }
+  return {
+    ok: true,
+    policy: {
+      maxEvidenceAgeSeconds,
+      evaluatedAt,
+    },
+  };
+}
+
+/** @param {DeploymentEvidence} evidence @param {EvidenceFreshnessPolicy | null} policy */
+function evaluateEvidenceFreshness(evidence, policy) {
+  if (policy === null) return defaultFreshness(evidence);
+  if (evidence.type !== "runtime-evidence") return defaultFreshness(evidence);
+  const collectedMs = Date.parse(evidence.collectedAt);
+  const evaluatedMs = Date.parse(policy.evaluatedAt);
+  const ageSeconds = (evaluatedMs - collectedMs) / 1000;
+  const status = ageSeconds < 0
+    ? "FUTURE"
+    : ageSeconds <= policy.maxEvidenceAgeSeconds
+      ? "FRESH"
+      : "STALE";
+  return {
+    configured: true,
+    status: /** @type {FreshnessStatus} */ (status),
+    collectedAt: evidence.collectedAt,
+    evaluatedAt: policy.evaluatedAt,
+    ageSeconds,
+    maxAgeSeconds: policy.maxEvidenceAgeSeconds,
+  };
+}
+
+/** @param {EvidenceFreshness} freshness */
+function freshnessCheck(freshness) {
+  if (!freshness.configured) return null;
+  if (freshness.status === "FRESH") {
+    return {
+      id: "evidence-freshness",
+      severity: /** @type {Severity} */ ("PASS"),
+      detail: `runtime evidence age ${freshness.ageSeconds}s is within the ${freshness.maxAgeSeconds}s freshness policy`,
+    };
+  }
+  return {
+    id: "evidence-freshness",
+    severity: /** @type {Severity} */ ("WARN"),
+    detail: freshness.status === "FUTURE"
+      ? `runtime evidence collection time is ${Math.abs(freshness.ageSeconds ?? 0)}s after the explicit evaluation time`
+      : `runtime evidence age ${freshness.ageSeconds}s exceeds the ${freshness.maxAgeSeconds}s freshness policy`,
+  };
+}
+
 /** @param {DeploymentVerificationReport} report */
 function deriveOverallStatus(report) {
   report.overallStatus =
     report.technicalStatus === "FAIL"
       ? "FAIL"
-      : report.deploymentStatus === "MATCH"
-        ? "PASS"
-        : "WARN";
+      : report.deploymentStatus !== "MATCH"
+        ? "WARN"
+        : report.freshness.configured && report.freshness.status !== "FRESH"
+          ? "WARN"
+          : "PASS";
   return report;
 }
 
@@ -100,12 +196,14 @@ function evidenceSubject(evidence) {
  * it.
  *
  * @param {string} target
- * @param {{ expectedRef?: string | null, expectedCommit?: string | null, deployedCommit: string | null, evidence: DeploymentEvidence }} options
+ * @param {{ expectedRef?: string | null, expectedCommit?: string | null, deployedCommit: string | null, evidence: DeploymentEvidence, freshnessPolicy?: EvidenceFreshnessPolicy | null }} options
  * @returns {DeploymentVerificationReport}
  */
 function inspectNormalizedDeploymentVerification(target, options) {
   const hasInvalidDeployedEvidence = options.deployedCommit === null;
   const deployedCommit = options.deployedCommit?.toLowerCase() ?? null;
+  const evidence = deploymentEvidence(options);
+  const freshness = evaluateEvidenceFreshness(evidence, options.freshnessPolicy ?? null);
 
   let baseline;
   try {
@@ -122,8 +220,9 @@ function inspectNormalizedDeploymentVerification(target, options) {
       expectedResolvedCommit: null,
       baselineStatus: "UNVERIFIED",
       deployedCommit,
-      evidence: deploymentEvidence(options),
+      evidence,
       deploymentStatus: "UNVERIFIED",
+      freshness,
       technicalStatus: "FAIL",
       overallStatus: "FAIL",
       checks: [
@@ -151,8 +250,9 @@ function inspectNormalizedDeploymentVerification(target, options) {
         : null,
     baselineStatus: baseline.baselineStatus,
     deployedCommit,
-    evidence: deploymentEvidence(options),
+    evidence,
     deploymentStatus: "UNVERIFIED",
+    freshness,
     technicalStatus: baseline.technicalStatus,
     overallStatus: "WARN",
     checks: [...baseline.checks],
@@ -165,6 +265,8 @@ function inspectNormalizedDeploymentVerification(target, options) {
       ? "caller-supplied deployed commit is not a valid full 40- or 64-character hex object ID"
       : evidenceDescription(report.evidence),
   });
+  const evidenceFreshnessCheck = freshnessCheck(report.freshness);
+  if (evidenceFreshnessCheck) report.checks.push(evidenceFreshnessCheck);
 
   if (report.technicalStatus === "FAIL") {
     report.checks.push({
@@ -258,7 +360,7 @@ export function inspectDeploymentVerification(target, options = {}) {
  * mismatches or unverifiable runtime claims.
  *
  * @param {string} target
- * @param {{ expectedRef?: string | null, expectedCommit?: string | null, evidenceFile: string }} options
+ * @param {{ expectedRef?: string | null, expectedCommit?: string | null, evidenceFile: string, maxEvidenceAgeSeconds?: number | null, evaluatedAt?: string | null }} options
  * @returns {{ ok: true, report: DeploymentVerificationReport } | { ok: false, error: { id: string, detail: string } }}
  */
 export function inspectDeploymentVerificationFromEvidenceFile(target, options) {
@@ -287,6 +389,12 @@ export function inspectDeploymentVerificationFromEvidenceFile(target, options) {
     };
   }
 
+  const freshnessPolicyResult = validateEvidenceFreshnessPolicy(
+    options.maxEvidenceAgeSeconds ?? null,
+    options.evaluatedAt ?? null,
+  );
+  if (!freshnessPolicyResult.ok) return freshnessPolicyResult;
+
   const evidence = runtimeEvidenceTrustMetadata(validation.evidence);
   return {
     ok: true,
@@ -295,6 +403,7 @@ export function inspectDeploymentVerificationFromEvidenceFile(target, options) {
       expectedCommit: options.expectedCommit ?? null,
       deployedCommit: validation.evidence.deployment.commit,
       evidence,
+      freshnessPolicy: freshnessPolicyResult.policy,
     }),
   };
 }
@@ -305,6 +414,9 @@ export function formatDeploymentVerification(report) {
     report.evidence.type === "runtime-evidence"
       ? `validated Runtime Evidence Contract v1; source: ${report.evidence.source}; authenticated: ${report.evidence.authenticated}; collected at: ${report.evidence.collectedAt}; runtime: ${report.evidence.runtime.name}${report.evidence.runtime.environment === undefined ? "" : `; environment: ${report.evidence.runtime.environment}`}`
       : "caller supplied; unauthenticated";
+  const freshnessDescription = report.freshness.configured
+    ? `${report.freshness.status}; age: ${report.freshness.ageSeconds}s; max: ${report.freshness.maxAgeSeconds}s; evaluated at: ${report.freshness.evaluatedAt}`
+    : report.freshness.status;
   const lines = [
     `Deployment verification: ${report.root}`,
     "",
@@ -313,6 +425,7 @@ export function formatDeploymentVerification(report) {
     `Expected commit: ${report.expectedCommit ?? "(not supplied)"}`,
     `Deployed commit: ${report.deployedCommit ?? "(invalid or unavailable)"}`,
     `Deployed evidence: ${evidenceDescription}`,
+    `Evidence freshness: ${freshnessDescription}`,
     "",
   ];
 
@@ -330,7 +443,7 @@ export function formatDeploymentVerification(report) {
   return lines.join("\n");
 }
 
-/** @typedef {{ expectedRef: string | null, expectedCommit: string | null, deployedCommit: string | null, evidenceFile: string | null, json: boolean, target: string | null }} CliArguments */
+/** @typedef {{ expectedRef: string | null, expectedCommit: string | null, deployedCommit: string | null, evidenceFile: string | null, maxEvidenceAgeSeconds: number | null, evaluatedAt: string | null, json: boolean, target: string | null }} CliArguments */
 /** @param {string[]} argv @returns {CliArguments | null} */
 export function parseArguments(argv) {
   /** @type {CliArguments} */
@@ -339,6 +452,8 @@ export function parseArguments(argv) {
     expectedCommit: null,
     deployedCommit: null,
     evidenceFile: null,
+    maxEvidenceAgeSeconds: null,
+    evaluatedAt: null,
     json: false,
     target: null,
   };
@@ -353,7 +468,9 @@ export function parseArguments(argv) {
       argument === "--expected-ref" ||
       argument === "--expected-commit" ||
       argument === "--deployed-commit" ||
-      argument === "--evidence-file"
+      argument === "--evidence-file" ||
+      argument === "--max-evidence-age-seconds" ||
+      argument === "--evaluated-at"
     ) {
       const value = argv[index + 1];
       if (typeof value !== "string" || !value || value.startsWith("--")) return null;
@@ -362,6 +479,13 @@ export function parseArguments(argv) {
       if (argument === "--expected-commit") options.expectedCommit = value;
       if (argument === "--deployed-commit") options.deployedCommit = value;
       if (argument === "--evidence-file") options.evidenceFile = value;
+      if (argument === "--max-evidence-age-seconds") {
+        if (!/^[1-9]\d*$/.test(value)) return null;
+        const maxEvidenceAgeSeconds = Number(value);
+        if (!Number.isSafeInteger(maxEvidenceAgeSeconds)) return null;
+        options.maxEvidenceAgeSeconds = maxEvidenceAgeSeconds;
+      }
+      if (argument === "--evaluated-at") options.evaluatedAt = value;
       index += 1;
     } else if (argument.startsWith("-")) {
       return null;
@@ -376,10 +500,16 @@ export function parseArguments(argv) {
     (!options.expectedRef && !options.expectedCommit) ||
     (options.deployedCommit === null && options.evidenceFile === null) ||
     (options.deployedCommit !== null && options.evidenceFile !== null) ||
-    (options.deployedCommit !== null && !isFullObjectId(options.deployedCommit))
+    (options.deployedCommit !== null && !isFullObjectId(options.deployedCommit)) ||
+    (options.maxEvidenceAgeSeconds !== null && options.evidenceFile === null)
   ) {
     return null;
   }
+  const freshnessPolicy = validateEvidenceFreshnessPolicy(
+    options.maxEvidenceAgeSeconds,
+    options.evaluatedAt,
+  );
+  if (!freshnessPolicy.ok) return null;
 
   return options;
 }
@@ -388,7 +518,7 @@ export function main(argv = process.argv.slice(2)) {
   const options = parseArguments(argv);
   if (!options) {
     console.error(
-      "Usage: node scripts/audit-deployment-verification.js [repository] (--expected-ref <git-ref> | --expected-commit <commit>) (--deployed-commit <40-or-64-hex-object-id> | --evidence-file <runtime-evidence.json>) [--json]",
+      "Usage: node scripts/audit-deployment-verification.js [repository] (--expected-ref <git-ref> | --expected-commit <commit>) (--deployed-commit <40-or-64-hex-object-id> | --evidence-file <runtime-evidence.json> [--max-evidence-age-seconds <seconds> --evaluated-at <absolute-iso-timestamp>]) [--json]",
     );
     return 1;
   }
@@ -402,6 +532,8 @@ export function main(argv = process.argv.slice(2)) {
         expectedRef: options.expectedRef,
         expectedCommit: options.expectedCommit,
         evidenceFile: options.evidenceFile,
+        maxEvidenceAgeSeconds: options.maxEvidenceAgeSeconds,
+        evaluatedAt: options.evaluatedAt,
       },
     );
     if (!result.ok) {
