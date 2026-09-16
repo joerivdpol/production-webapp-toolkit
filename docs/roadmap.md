@@ -23,10 +23,17 @@ Core principles:
 2. Add deployment to ecosystem status with per repository aggregation.
 3. Preserve direct commit and Runtime Evidence Contract input modes without duplicating validators.
 4. Add evidence freshness semantics without silently generating collection timestamps.
-5. Add explicit runtime identity binding so evidence cannot be accidentally applied to the wrong runtime.6. Pin the toolchain used by CI and local development so package metadata and CI do not drift.
+5. Add explicit runtime identity binding so evidence cannot be accidentally applied to the wrong runtime.
+6. Pin the toolchain used by CI and local development so package metadata and CI do not drift.
 7. Expand release readiness to verify the full v1.1 capability surface and documentation.
 8. Add clean checkout release validation and end to end evidence to ecosystem status tests.
 9. Publish v1.1.0 with release notes that define status and trust semantics.
+
+### Current v1.1 progress
+
+* Repository status deployment dimension: merged.
+* Ecosystem status deployment dimension: implemented; awaiting merge.
+* Evidence freshness, runtime identity binding, reproducible release checks, and v1.1.0 release remain open.
 
 ## v1.2 Production readiness
 
@@ -44,7 +51,8 @@ Core principles:
 21. Add security vulnerability evidence from supported advisory sources.
 22. Add SBOM generation for releases.
 23. Add dependency license compliance checks.
-24. Add build reproducibility checks for lockfiles, pinned runtimes, and deterministic generated inputs.25. Add artifact provenance from source commit through CI build to deployment artifact identity.
+24. Add build reproducibility checks for lockfiles, pinned runtimes, and deterministic generated inputs.
+25. Add artifact provenance from source commit through CI build to deployment artifact identity.
 26. Add release risk classification based on explicit changed surfaces and policy inputs.
 27. Add changed surface analysis for frontend, database, auth, payment, deployment, API, and infrastructure changes.
 28. Add policy driven test selection while retaining required blocking checks.
@@ -67,7 +75,8 @@ Core principles:
 42. Add frontend runtime checks for broken routes, console errors, failed assets, hydration errors, and security policy violations.
 43. Add performance budgets for bundle size and selected user experience metrics.
 44. Add accessibility gates for critical routes.
-45. Add SEO production checks for metadata, canonical URLs, sitemap, robots, hreflang, and structured data.46. Add localization completeness checks for missing keys, placeholder mismatches, fallback leakage, and formatting drift.
+45. Add SEO production checks for metadata, canonical URLs, sitemap, robots, hreflang, and structured data.
+46. Add localization completeness checks for missing keys, placeholder mismatches, fallback leakage, and formatting drift.
 47. Add route inventory and route coverage checks for auth, tests, and smoke coverage.
 48. Add authorization policy checks for unguarded admin routes, server endpoints, and client only authorization patterns.
 49. Add webhook safety profiles for signature verification, idempotency, replay handling, ordering, retries, and unknown events.
@@ -92,7 +101,8 @@ Core principles:
 
 63. Expand machine readable remediation plans with risk, ownership, files, and validation requirements.
 64. Add safe autofix only for deterministic low risk repository configuration changes.
-65. Add AI agent safety profiles covering AGENTS.md, canonical source references, test commands, secret policy, migration policy, and deployment boundaries.66. Add diff aware architecture policy evaluation driven by project manifests and private policy packs.
+65. Add AI agent safety profiles covering AGENTS.md, canonical source references, test commands, secret policy, migration policy, and deployment boundaries.
+66. Add diff aware architecture policy evaluation driven by project manifests and private policy packs.
 67. Add controlled agent workflows that can propose fixes but cannot silently cross production or business truth boundaries.
 68. Add release evidence bundles containing source commit, CI evidence, dependency snapshot, security results, baseline, deployment evidence, and runtime health.
 69. Add optional compliance export formats without turning the toolkit into a compliance product by default.

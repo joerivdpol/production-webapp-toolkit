@@ -153,7 +153,7 @@ The repository-status layer adds no network access, runtime probing, target-repo
 
 `bun run audit:ecosystem-status` aggregates the canonical repository-status report for several repositories. It does not add QUALITY, GOVERNANCE, BASELINE, or DEPLOYMENT rules, choose a branch, or infer a production baseline from `main`, remote `HEAD`, or governance production candidates.
 
-The current ecosystem configuration contract does not yet accept deployment evidence. Repository reports therefore include `DEPLOYMENT NOT_CONFIGURED`, so an otherwise passing repository contributes an overall warning even when its baseline matches. Deployment-aware ecosystem configuration and aggregate deployment counts are the next planned capability; see `docs/roadmap.md`.
+Config mode can supply deployment evidence independently for each repository. A repository may use either `deployedCommit` with a full Git object ID or `evidenceFile` with a Runtime Evidence Contract v1 document. Deployment evidence requires an explicit `expectedRef` and/or `expectedCommit`; the two deployment inputs are mutually exclusive. Repositories without deployment evidence continue to report `DEPLOYMENT NOT_CONFIGURED` and contribute a readiness warning when their other dimensions pass.
 
 Use positional repository paths when no repository has a configured production baseline. Every positional repository therefore reports both `BASELINE NOT_CONFIGURED` and `DEPLOYMENT NOT_CONFIGURED` and contributes an overall warning when its other dimensions pass:
 
@@ -171,12 +171,14 @@ Use `--config` for explicit, per-repository baseline selectors. Positional paths
       "name": "app-a",
       "path": "/path/to/app-a",
       "expectedRef": "origin/production",
-      "compareRef": "HEAD"
+      "compareRef": "HEAD",
+      "deployedCommit": "0123456789abcdef0123456789abcdef01234567"
     },
     {
       "name": "worker-b",
       "path": "/path/to/worker-b",
-      "expectedCommit": "abc1234"
+      "expectedRef": "origin/production",
+      "evidenceFile": "./evidence/worker-b.json"
     },
     {
       "path": "/path/to/app-c"
@@ -185,14 +187,14 @@ Use `--config` for explicit, per-repository baseline selectors. Positional paths
 }
 ```
 
-`name` is display metadata only. A repository with no `expectedRef` or `expectedCommit` remains `NOT_CONFIGURED`; `compareRef` requires one of those selectors. Baseline ref and commit validation is delegated unchanged to the repository-status baseline auditor. Duplicate resolved target paths are rejected, preventing duplicate counts.
+`name` is display metadata only. A repository with no `expectedRef` or `expectedCommit` remains `BASELINE NOT_CONFIGURED`; `compareRef` requires one of those selectors. `deployedCommit` and `evidenceFile` require a baseline and cannot be supplied together. Direct deployment commits reuse the canonical full-object-ID validator. Evidence files are resolved relative to the ecosystem config file and are validated through repository status and the canonical Runtime Evidence Contract adapter. Duplicate resolved target paths are rejected, preventing duplicate counts.
 
 ```sh
 bun run audit:ecosystem-status --config /private/path/ecosystem-status.json
 bun run audit:ecosystem-status --config /private/path/ecosystem-status.json --json
 ```
 
-The stable JSON report contains `inputMode`, optional `configVersion`, ordered `repositories`, machine-readable `summary`, `technicalStatus`, and `overallStatus`; it never prints config-file contents or the config path. Overall status is `FAIL` when any repository fails, otherwise `WARN` when any repository warns, otherwise `PASS`. Technical status fails only when at least one repository has a technical failure. `FAIL` exits 1; `PASS` and `WARN` exit 0. A failed or missing target is isolated to that repository so the remaining repositories are still inspected.
+The stable JSON report contains `inputMode`, optional `configVersion`, ordered `repositories`, machine-readable `summary`, `technicalStatus`, and `overallStatus`; it never prints config-file contents or the config path. The summary now counts deployment `pass`, `warn`, `fail`, and `notConfigured` states alongside the existing dimensions, and the human scorecard includes a `DEPLOYMENT` column. Overall status is `FAIL` when any repository fails, otherwise `WARN` when any repository warns, otherwise `PASS`. Technical status fails only when at least one repository has a technical failure. `FAIL` exits 1; `PASS` and `WARN` exit 0. A failed or missing target, unreadable evidence file, malformed evidence document, or schema-invalid runtime evidence is isolated to that repository so the remaining repositories are still inspected.
 
 The command is read only and offline. The ecosystem layer only reads an explicitly supplied JSON config and calls the in-process repository-status inspector; it runs no Git command itself and performs no fetch, network request, checkout, or target-repository write.
 

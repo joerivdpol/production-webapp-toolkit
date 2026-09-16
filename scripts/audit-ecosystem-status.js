@@ -5,12 +5,13 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { inspectRepositoryStatus } from "./audit-repository-status.js";
+import { isFullObjectId } from "./audit-deployment-verification.js";
 
 const CONFIG_VERSION = 1;
 const USAGE =
   "Usage: node scripts/audit-ecosystem-status.js <repository> [repository...] [--json] | --config <file> [--json]";
 
-/** @typedef {{ name?: string, target: string, expectedRef?: string | null, expectedCommit?: string | null, compareRef?: string | null }} RepositoryInput */
+/** @typedef {{ name?: string, target: string, expectedRef?: string | null, expectedCommit?: string | null, compareRef?: string | null, deployedCommit?: string | null, evidenceFile?: string | null }} RepositoryInput */
 
 /** @param {unknown} error */
 function errorDetail(error) {
@@ -58,7 +59,7 @@ export function parseEcosystemConfig(value, baseDirectory = process.cwd()) {
       return { error: `config repository ${index + 1} must be an object` };
     }
 
-    const repository = /** @type {{ name?: unknown, path?: unknown, expectedRef?: unknown, expectedCommit?: unknown, compareRef?: unknown }} */ (entry);
+    const repository = /** @type {{ name?: unknown, path?: unknown, expectedRef?: unknown, expectedCommit?: unknown, compareRef?: unknown, deployedCommit?: unknown, evidenceFile?: unknown }} */ (entry);
     if (typeof repository.path !== "string" || repository.path.trim().length === 0) {
       return { error: `config repository ${index + 1} must have a non-empty path` };
     }
@@ -68,8 +69,22 @@ export function parseEcosystemConfig(value, baseDirectory = process.cwd()) {
     if (!optionalSelector(repository.expectedRef) || !optionalSelector(repository.expectedCommit) || !optionalSelector(repository.compareRef)) {
       return { error: `config repository ${index + 1} baseline selectors must be non-empty strings when supplied` };
     }
-    if (repository.compareRef !== undefined && repository.expectedRef === undefined && repository.expectedCommit === undefined) {
+    if (!optionalSelector(repository.deployedCommit) || !optionalSelector(repository.evidenceFile)) {
+      return { error: `config repository ${index + 1} deployment evidence values must be non-empty strings when supplied` };
+    }
+    const baselineConfigured = repository.expectedRef !== undefined || repository.expectedCommit !== undefined;
+    const deploymentConfigured = repository.deployedCommit !== undefined || repository.evidenceFile !== undefined;
+    if (repository.compareRef !== undefined && !baselineConfigured) {
       return { error: `config repository ${index + 1} compareRef requires expectedRef or expectedCommit` };
+    }
+    if (repository.deployedCommit !== undefined && repository.evidenceFile !== undefined) {
+      return { error: `config repository ${index + 1} deployment evidence inputs are mutually exclusive` };
+    }
+    if (deploymentConfigured && !baselineConfigured) {
+      return { error: `config repository ${index + 1} deployment evidence requires expectedRef or expectedCommit` };
+    }
+    if (typeof repository.deployedCommit === "string" && !isFullObjectId(repository.deployedCommit)) {
+      return { error: `config repository ${index + 1} deployedCommit must be a full 40- or 64-character hexadecimal Git object ID` };
     }
 
     const target = path.resolve(baseDirectory, repository.path);
@@ -83,6 +98,8 @@ export function parseEcosystemConfig(value, baseDirectory = process.cwd()) {
       expectedRef: typeof repository.expectedRef === "string" ? repository.expectedRef : null,
       expectedCommit: typeof repository.expectedCommit === "string" ? repository.expectedCommit : null,
       compareRef: typeof repository.compareRef === "string" ? repository.compareRef : null,
+      deployedCommit: typeof repository.deployedCommit === "string" ? repository.deployedCommit : null,
+      evidenceFile: typeof repository.evidenceFile === "string" ? path.resolve(baseDirectory, repository.evidenceFile) : null,
     };
     if (typeof repository.name === "string") normalized.name = repository.name;
     repositories.push(normalized);
@@ -156,6 +173,7 @@ export function readEcosystemConfig(configPath) {
 /** @param {RepositoryInput} repository @param {unknown} error */
 function failedRepositoryStatus(repository, error) {
   const baselineConfigured = Boolean(repository.expectedRef || repository.expectedCommit);
+  const deploymentConfigured = Boolean(repository.deployedCommit || repository.evidenceFile);
   const detail = `repository status inspection could not run reliably: ${errorDetail(error)}`;
   const baseline = baselineConfigured
     ? {
@@ -175,18 +193,50 @@ function failedRepositoryStatus(repository, error) {
         checks: [],
       };
 
+  const deployment = deploymentConfigured
+    ? {
+        configured: true,
+        status: "FAIL",
+        technicalStatus: "FAIL",
+        deploymentStatus: "UNVERIFIED",
+        overallStatus: "FAIL",
+        baselineStatus: baseline.baselineStatus,
+        expectedRef: repository.expectedRef ?? null,
+        expectedCommit: repository.expectedCommit ?? null,
+        expectedResolvedCommit: null,
+        deployedCommit: repository.deployedCommit ?? null,
+        evidence: null,
+        checks: [{ id: "ecosystem-inspection", severity: "FAIL", detail }],
+      }
+    : {
+        configured: false,
+        status: "NOT_CONFIGURED",
+        technicalStatus: "PASS",
+        deploymentStatus: null,
+        overallStatus: null,
+        baselineStatus: null,
+        expectedRef: null,
+        expectedCommit: null,
+        expectedResolvedCommit: null,
+        deployedCommit: null,
+        evidence: null,
+        checks: [],
+      };
+
   return {
     root: path.resolve(repository.target),
     profile: "unknown",
     baselineConfigured,
+    deploymentConfigured,
     dimensions: {
       quality: { status: "FAIL", technicalStatus: "FAIL", profile: "unknown", detail },
       governance: { status: "FAIL", technicalStatus: "FAIL", checks: [{ id: "ecosystem-inspection", severity: "FAIL", detail }] },
       baseline,
+      deployment,
     },
     technicalStatus: "FAIL",
     overallStatus: "FAIL",
-    summary: { quality: "FAIL", governance: "FAIL", baseline: baseline.status },
+    summary: { quality: "FAIL", governance: "FAIL", baseline: baseline.status, deployment: deployment.status },
   };
 }
 
@@ -210,6 +260,8 @@ export function inspectEcosystemStatus(inputs, metadata) {
         expectedRef: input.expectedRef ?? null,
         expectedCommit: input.expectedCommit ?? null,
         compareRef: input.compareRef ?? null,
+        deployedCommit: input.deployedCommit ?? null,
+        evidenceFile: input.evidenceFile ?? null,
       });
     } catch (error) {
       status = failedRepositoryStatus(input, error);
@@ -229,6 +281,7 @@ export function inspectEcosystemStatus(inputs, metadata) {
     quality: { pass: 0, fail: 0 },
     governance: { pass: 0, warn: 0, fail: 0 },
     baseline: { pass: 0, warn: 0, fail: 0, notConfigured: 0 },
+    deployment: { pass: 0, warn: 0, fail: 0, notConfigured: 0 },
     profiles: { webapp: 0, "python-service": 0, unknown: 0 },
   };
 
@@ -239,6 +292,8 @@ export function inspectEcosystemStatus(inputs, metadata) {
     increment(summary.governance, repository.dimensions.governance.status.toLowerCase());
     const baselineStatus = repository.dimensions.baseline.status;
     increment(summary.baseline, baselineStatus === "NOT_CONFIGURED" ? "notConfigured" : baselineStatus.toLowerCase());
+    const deploymentStatus = repository.dimensions.deployment.status;
+    increment(summary.deployment, deploymentStatus === "NOT_CONFIGURED" ? "notConfigured" : deploymentStatus.toLowerCase());
     increment(summary.profiles, repository.profile);
   }
 
@@ -262,6 +317,13 @@ function baselineLabel(baseline) {
   return value.status === "FAIL" ? `FAIL/${value.baselineStatus ?? "UNVERIFIED"}` : value.baselineStatus ?? value.status ?? "UNVERIFIED";
 }
 
+/** @param {unknown} deployment */
+function deploymentLabel(deployment) {
+  const value = /** @type {{ configured?: boolean, status?: string, deploymentStatus?: string | null }} */ (deployment);
+  if (!value.configured) return "NOT_CONFIGURED";
+  return value.status === "FAIL" ? `FAIL/${value.deploymentStatus ?? "UNVERIFIED"}` : value.deploymentStatus ?? value.status ?? "UNVERIFIED";
+}
+
 /** @param {ReturnType<typeof inspectEcosystemStatus>} report */
 export function formatEcosystemStatus(report) {
   /** @type {string[][]} */
@@ -271,9 +333,10 @@ export function formatEcosystemStatus(report) {
     repository.dimensions.quality.status,
     repository.dimensions.governance.status,
     baselineLabel(repository.dimensions.baseline),
+    deploymentLabel(repository.dimensions.deployment),
     repository.overallStatus,
   ]);
-  const headers = ["REPOSITORY", "PROFILE", "QUALITY", "GOVERNANCE", "BASELINE", "OVERALL"];
+  const headers = ["REPOSITORY", "PROFILE", "QUALITY", "GOVERNANCE", "BASELINE", "DEPLOYMENT", "OVERALL"];
   const widths = headers.map((header, index) => Math.max(header.length, ...rows.map((row) => (row[index] ?? "").length)) + 2);
   /** @param {string[]} row */
   const render = (row) => row.map((cell, index) => cell.padEnd(widths[index] ?? 0)).join("").trimEnd();
