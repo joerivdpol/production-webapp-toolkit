@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "packageManager": {
+    "name": "bun",
+    "expectedVersion": "1.3.14"
+  },
+  "runtime": {
+    "nodeVersionFile": ".node-version",
+    "expectedVersion": "24.21.0",
+    "requireEngineMajorMatch": true
+  },
+  "lockfile": {
+    "path": "bun.lock",
+    "expectedSha256": "7fb343eb8f8a763296a0a479e82f26ed6dde067154b198ff4904e9ab3fb9a47f"
+  },
+  "frozenInstall": {
+    "files": [
+      ".github/workflows/ci.yml"
+    ],
+    "requiredCommands": [
+      "bun install --frozen-lockfile"
+    ]
+  },
+  "generatedInputs": []
+}

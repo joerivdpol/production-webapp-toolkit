@@ -25,6 +25,8 @@ jobs:
 
       - name: Public repository safety
         run: node scripts/audit-public-repo-safety.js .
+      - name: Build reproducibility policy
+        run: bun run audit:reproducibility --root . --policy config/build-reproducibility-policy.json
       - run: bun run typecheck
       - run: bun run test
       - run: bun run lint

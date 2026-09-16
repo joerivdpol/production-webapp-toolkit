@@ -729,3 +729,38 @@ bun run audit:licenses --evidence-file ./license-evidence.json --policy /private
 ```
 
 The evidence validator and audit core perform no network, Git, environment, subprocess, installation, repository write, or provider mutation operation. Source authentication metadata is retained as trust metadata and does not change the exact-expression policy result.
+
+### Build reproducibility audit
+
+`bun run audit:reproducibility` performs a local read only audit against an explicit Build Reproducibility Policy v1. The policy binds the repository to an exact package manager, an exact Node runtime file, a regular lockfile, one or more required frozen install commands in explicit CI files, and optional SHA256 bindings for generated build inputs.
+
+The audit distinguishes configuration evidence from stronger artifact reproducibility claims. It never executes package installation, generators, build commands, Git, network requests, or environment inspection. A generated input is checked only when its repository relative path and expected SHA256 are explicitly declared. An empty `generatedInputs` array means the policy declares no generated inputs for this repository; the toolkit does not discover or invent them.
+
+```json
+{
+  "version": 1,
+  "packageManager": { "name": "bun", "expectedVersion": "1.3.14" },
+  "runtime": {
+    "nodeVersionFile": ".node-version",
+    "expectedVersion": "24.21.0",
+    "requireEngineMajorMatch": true
+  },
+  "lockfile": {
+    "path": "bun.lock",
+    "expectedSha256": "<64-character SHA256>"
+  },
+  "frozenInstall": {
+    "files": [".github/workflows/ci.yml"],
+    "requiredCommands": ["bun install --frozen-lockfile"]
+  },
+  "generatedInputs": [
+    { "path": "src/generated/schema.json", "sha256": "<64-character SHA256>" }
+  ]
+}
+```
+
+Lockfiles and generated inputs must be regular non symlink files and are read within bounded sizes. Policy paths reject traversal. A configured lockfile digest or generated input digest mismatch is blocking `FAIL`; exact package manager and runtime pins are always required. `engines.node` can optionally be required to match the pinned Node major. Frozen install evidence is static configuration evidence only: the audit proves that the configured command is present in an explicit CI file, not that a particular CI run executed it.
+
+```sh
+bun run audit:reproducibility --root . --policy config/build-reproducibility-policy.json
+```

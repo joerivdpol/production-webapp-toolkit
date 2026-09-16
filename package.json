@@ -61,7 +61,8 @@
     "sbom:generate": "node scripts/generate-sbom.js",
     "license:evidence": "node scripts/license-evidence.js",
     "license:collect:installed": "node scripts/collect-installed-license-evidence.js",
-    "audit:licenses": "node scripts/audit-licenses.js"
+    "audit:licenses": "node scripts/audit-licenses.js",
+    "audit:reproducibility": "node scripts/audit-build-reproducibility.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
