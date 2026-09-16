@@ -49,8 +49,9 @@ Core principles:
 * Authenticated read-only GitHub Actions CI Evidence collector: merged.
 * Read-only GitHub branch protection and ruleset audit: merged.
 * Environment Contract v1 audit: merged.
-* Client environment exposure and unsafe public naming audit: implementation in progress.
-* Public safety expansion and the remaining production-readiness capabilities remain open.
+* Client environment exposure and unsafe public naming audit: merged.
+* Public safety expansion for credentials, frontend artifacts, and CI leakage: implementation in progress.
+* Migration safety and the remaining production-readiness capabilities remain open.
 
 10. Add CI evidence for the exact commit being evaluated, including tests, typecheck, lint, and build outcomes.
 11. Add read only GitHub branch protection and ruleset auditing.

@@ -274,6 +274,20 @@ Undeclared public references are warnings when their names are otherwise non-sec
 
 The audit is local and read only. It never reads runtime `.env` files, process environment values, example values, network resources, Git metadata, or secret stores and never writes to the inspected repository. `PASS` and `WARN` exit 0; detected unsafe exposure, invalid inputs, or technical inspection failure exits 1.
 
+### Public repository safety gate
+
+`bun run audit:safety .` is the blocking high-confidence safety gate for content already tracked by Git. Findings contain only a rule identifier and file path; matched credentials, usernames, private-key bodies, and secret values are never printed.
+
+The gate blocks tracked runtime dotenv files, private-key and credential-file locations, private-key material, credentialed public URLs, provider-specific credentials, and strong generic hardcoded secret assignments. Provider signatures cover common GitHub, AWS, Google, Stripe, OpenAI, Xendit, SendGrid, npm, GitLab, Slack, and Telegram credential formats. Generic assignments are considered only when the assignment name has a strong secret component and the value looks non-placeholder; obvious example, fixture, dummy, redacted, and replace-me values are excluded to keep tests and documentation usable.
+
+Package-registry authentication and Docker registry auth values are detected without reporting their contents. Tracked credential locations such as netrc, Python package credentials, AWS credentials, application-default cloud credentials, and service-account JSON files are rejected. Additional private-key file formats such as ECDSA, DSA, JKS, and keystores are included.
+
+Tracked frontend artifacts and source maps receive a larger but still bounded text scan so credentials embedded in generated JavaScript are not skipped merely because a bundle exceeds the normal source limit. A strong secret assignment found there is reported separately as `frontend-bundle-secret-assignment`. Binary content and files beyond the relevant bound are not decoded.
+
+GitHub Actions workflows receive a separate leakage check. Normal secret injection into a command environment is allowed, while direct secret output, output of an environment variable mapped from a secret, dumping the environment when secret mappings exist, serializing the complete secrets object, or enabling shell tracing around secret expressions is blocked. Explicit GitHub masking commands remain allowed.
+
+The scanner does not follow tracked symlinks, so a repository cannot cause this audit to read a linked file outside the repository. Credentialed URLs to reserved test hosts such as localhost and reserved test domains remain valid fixtures. This gate complements Environment Contract and client-exposure auditing: those reason about declared public/server policy, while public safety looks for tracked credential material and high-confidence leakage patterns.
+
 ## Repository status
 
 `bun run audit:repository-status /path/to/repository` combines the existing profiled quality, offline Git-governance, optional production-baseline, optional deployment-verification, and optional CI-verification audits into one read-only scorecard. It composes their canonical results rather than reimplementing their rules or inferring production truth.
