@@ -896,3 +896,38 @@ bun run audit:orphans --evidence-file ./orphan-evidence.json --policy /private/p
 ```
 
 The canonical evidence validator and audit core are offline and read only. The static collector reads only the configured repository, TypeScript project, and JSON catalogs. It performs no network calls, package installation, Git mutation, environment inspection, or repository writes, and it never generates collection timestamps. Static reference evidence is engineering evidence, not proof that runtime code paths are reachable. Organization-specific exclusions, minimum reference counts, severities, and exceptions stay outside the public toolkit.
+
+### Repository hygiene audit
+
+`bun run audit:hygiene` performs a local read only audit of explicit repository hygiene policy. The public toolkit does not decide which configuration is stale, which generated paths are forbidden, which configuration variants are mutually exclusive, or which tracked binaries are intentionally accepted. Those choices stay in project or private organization policy.
+
+Repository Hygiene Policy v1 can detect five classes of repository drift. Explicit stale path patterns identify obsolete configuration that is still tracked. Exclusive configuration groups detect multiple tracked variants of one configuration family. Generated artifact patterns catch build or coverage output committed without an explicit allowlist. Workflow roots detect duplicate workflow names and byte identical workflow files. A maximum tracked file size identifies oversized regular files unless an explicit path allowlist permits them.
+
+```json
+{
+  "version": 1,
+  "staleConfigPatterns": ["legacy/**", "*.legacy.config.js"],
+  "exclusiveConfigGroups": [
+    { "id": "eslint", "paths": ["eslint.config.js", ".eslintrc.json"] }
+  ],
+  "generatedArtifactPatterns": ["dist/**", "coverage/**"],
+  "generatedArtifactAllowlist": ["fixtures/**"],
+  "workflowRoots": [".github/workflows"],
+  "maxTrackedFileBytes": 5242880,
+  "oversizedAllowlist": ["fixtures/large.bin"],
+  "severity": {
+    "staleConfig": "WARN",
+    "duplicateConfig": "FAIL",
+    "generatedArtifact": "FAIL",
+    "duplicateWorkflow": "WARN",
+    "oversizedFile": "FAIL",
+    "workflowInspection": "WARN"
+  }
+}
+```
+
+```sh
+bun run audit:hygiene --root . --policy /private/path/repository-hygiene-policy.json
+```
+
+The auditor uses only `git ls-files` to establish tracked paths and then performs bounded local filesystem inspection. Workflow inspection is restricted to tracked regular text files no larger than 2 MiB; symbolic links are never followed and uninspectable workflow files remain visible according to explicit policy severity. Reports contain paths, sizes, hashes only for internal duplicate comparison, and generic findings rather than file contents. The audit performs no network calls, environment inspection, Git mutation, deletion, cleanup, or automatic remediation.
