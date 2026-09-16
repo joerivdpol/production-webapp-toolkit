@@ -91,7 +91,9 @@
     "audit:docs": "node scripts/audit-documentation-drift.js",
     "audit:ownership": "node scripts/audit-codeowners-ownership.js",
     "runtime:seo": "node scripts/run-seo-production-checks.js",
-    "audit:localization": "node scripts/audit-localization-completeness.js"
+    "audit:localization": "node scripts/audit-localization-completeness.js",
+    "route:inventory": "node scripts/route-inventory.js",
+    "audit:route-coverage": "node scripts/audit-route-coverage.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",

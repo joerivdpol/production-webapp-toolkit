@@ -1335,3 +1335,58 @@ bun run audit:localization -- --root /path/to/repository --policy /private/path/
 ```
 
 Catalog paths must be explicit repository-relative files. Symbolic links are never followed, catalog size is bounded, non-string translation leaves fail closed, and invalid JSON is rejected. The auditor performs no network, Git, environment, subprocess, or repository-write operations.
+
+### Route inventory and coverage audit
+
+`bun run route:inventory` validates Route Inventory v1, an explicit provider-neutral declaration of application route ids, paths, HTTP methods, auth classification, bound test files, and Synthetic Smoke Policy probe ids. Every route must classify auth as either `public` or `policy`; policy-bound routes carry an explicit policy id. This is a declaration binding only. The inventory does not claim that the authorization implementation is correct, which remains a separate authorization-audit concern.
+
+`bun run audit:route-coverage` evaluates the inventory against an explicit Route Coverage Policy v1. A rule may bind an expected path and methods, allowed auth modes or private policy ids, a minimum number of inspectable test-file bindings, and a minimum number of smoke-probe bindings. `requireRulesForAllRoutes` prevents inventory routes from silently falling outside coverage policy.
+
+Test coverage means that explicitly bound repository-relative files exist as regular non-symlink files. The audit does not read their contents and does not claim they passed; execution truth belongs to CI Evidence. Smoke coverage means that bound probe ids resolve in an independently validated Synthetic Smoke Policy v1. The route audit does not execute production traffic itself and does not duplicate smoke-runner safety logic.
+
+```json
+{
+  "version": 1,
+  "repository": "example-webapp",
+  "routes": [
+    {
+      "id": "admin-users",
+      "path": "/admin/users",
+      "methods": ["GET"],
+      "auth": { "mode": "policy", "policy": "admin" },
+      "testFiles": ["test/admin-users.test.js"],
+      "smokeProbes": ["admin-users-page"]
+    }
+  ]
+}
+```
+
+```json
+{
+  "version": 1,
+  "requireRulesForAllRoutes": true,
+  "rules": [
+    {
+      "routeId": "admin-users",
+      "expectedPath": "/admin/users",
+      "requiredMethods": ["GET"],
+      "allowedAuthModes": ["policy"],
+      "allowedAuthPolicies": ["admin"],
+      "minTestFiles": 1,
+      "minSmokeProbes": 1
+    }
+  ]
+}
+```
+
+```sh
+bun run route:inventory -- --file ./routes.json --json
+bun run audit:route-coverage -- \
+  --root /path/to/repository \
+  --inventory ./routes.json \
+  --policy /private/path/route-coverage-policy.json \
+  --smoke-policy /private/path/smoke-policy.json \
+  --json
+```
+
+The capability is local and read only. It does not infer framework routes, inspect test contents, execute tests, execute smoke probes, validate authorization implementation, read runtime environment values, or mutate repository or production state. Application-specific route ids and auth policy ids remain project configuration rather than public-toolkit business truth.
