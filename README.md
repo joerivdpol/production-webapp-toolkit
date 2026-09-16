@@ -623,3 +623,18 @@ bun run audit:cross-contracts \
 ```
 
 Both commands are offline and read only. Policy and inventory files are explicit caller inputs; the public toolkit contains no Happinezz-specific contract ids, versions, canonical ownership, or private organization rules.
+
+### Dependency and runtime drift audit
+
+`bun run audit:drift` compares explicit dependency and toolchain declarations across repositories. It reports exact version-string drift separately from major-version conflicts, and it now covers common frontend frameworks, client libraries, and tooling in addition to React, TanStack, Supabase, TypeScript, ESLint, and Playwright.
+
+Runtime evidence remains explicit. Node repositories may contribute `.node-version`, `packageManager`, and `engines.node`; Python repositories may contribute `.python-version`. The audit does not inspect installed runtimes or normalize version ranges into invented compatibility claims. Python-only repositories are not penalized for missing Node metadata.
+
+An optional version 1 runtime policy can constrain supported Node majors and package-manager majors or require an exact `.node-version`, pinned `packageManager`, and `engines.node`. Unsupported explicit policy evidence is blocking `FAIL`; missing evidence needed only to evaluate support remains `WARN` unless the policy explicitly requires that evidence.
+
+```sh
+bun run audit:drift /path/to/app-one /path/to/app-two --json
+bun run audit:drift /path/to/app-one /path/to/app-two --policy /private/path/runtime-policy.json
+```
+
+The human report includes an ecosystem matrix for high-value framework, runtime, client-library, and test-tool versions. The audit is local and read only: it reads repository metadata files only and performs no install, package-manager, network, Git mutation, or runtime probe.
