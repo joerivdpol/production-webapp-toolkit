@@ -670,3 +670,30 @@ bun run audit:vulnerabilities --evidence-file ./osv-evidence.json --policy /priv
 ```
 
 The canonical evidence validator and audit core are offline and read only. The OSV collector has one fixed HTTPS POST surface; the GitHub collector is limited to authenticated GET requests. Neither collector changes repositories, alerts, dependencies, or provider state.
+### CycloneDX release SBOM generation
+
+`bun run sbom:generate` emits a CycloneDX 1.7 JSON SBOM for an explicit release artifact. The generator reads only `package.json`, `.node-version`, and Bun text lockfile v1 from the target repository. It requires the caller to supply the full source commit, artifact SHA256, and absolute collection timestamp rather than inferring release identity from Git or the clock.
+
+The SBOM records:
+
+* application name and version;
+* release artifact SHA256;
+* full source commit;
+* Bun lockfile SHA256;
+* exact Node and Bun reference toolchain;
+* every resolved package name and version in `bun.lock`;
+* SRI package integrity converted to CycloneDX hexadecimal hashes when available;
+* explicit direct production, direct development, direct optional, or transitive relationship metadata.
+
+The root dependency graph contains only direct edges proven by the root workspace declaration. The generator does not infer transitive parent edges from version ranges. The SBOM marks this limitation with `toolkit:dependencyGraph=root-direct-only`; consumers must not interpret missing transitive parent edges as proof that a component has no dependencies.
+
+```sh
+bun run sbom:generate \
+  --root /path/to/repository \
+  --source-commit 0123456789abcdef0123456789abcdef01234567 \
+  --artifact-sha256 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --created-at 2026-09-16T15:30:00Z \
+  --json > release.cdx.json
+```
+
+The generator fails closed on unsupported lockfile structure, ambiguous direct dependency resolution, symlinked evidence files, floating Bun or Node toolchains, malformed release identity, and malformed package identities. Missing package integrity remains explicit as `toolkit:packageIntegrity=unavailable`; no hash is synthesized. The generator performs no Git, network, environment, subprocess, installation, or repository-write operation.

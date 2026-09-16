@@ -57,7 +57,8 @@
     "vulnerability:evidence": "node scripts/vulnerability-evidence.js",
     "vulnerability:osv:collect": "node scripts/collect-osv-vulnerability-evidence.js",
     "vulnerability:github:collect": "node scripts/collect-github-dependabot-evidence.js",
-    "audit:vulnerabilities": "node scripts/audit-vulnerabilities.js"
+    "audit:vulnerabilities": "node scripts/audit-vulnerabilities.js",
+    "sbom:generate": "node scripts/generate-sbom.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
