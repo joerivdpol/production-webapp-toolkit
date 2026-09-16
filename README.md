@@ -931,3 +931,45 @@ bun run audit:hygiene --root . --policy /private/path/repository-hygiene-policy.
 ```
 
 The auditor uses only `git ls-files` to establish tracked paths and then performs bounded local filesystem inspection. Workflow inspection is restricted to tracked regular text files no larger than 2 MiB; symbolic links are never followed and uninspectable workflow files remain visible according to explicit policy severity. Reports contain paths, sizes, hashes only for internal duplicate comparison, and generic findings rather than file contents. The audit performs no network calls, environment inspection, Git mutation, deletion, cleanup, or automatic remediation.
+
+### Documentation drift audit
+
+`bun run audit:docs` checks explicit documentation contracts against current repository evidence without generating or rewriting documentation. Documentation Drift Policy v1 names the Markdown or text documents that are in scope and independently enables package command references, documented environment variables, repository path references, and generated-document source bindings.
+
+Package command checking scans configured documentation for `bun run`, `npm run`, `pnpm run`, and `yarn run` references and verifies that the referenced script still exists in an explicit package manifest. Environment bindings reuse Environment Contract v1: variables marked `documented: true` must occur in at least one configured document, while variables not marked documented are not guessed into documentation requirements.
+
+Architecture and module references remain policy bounded. A path-reference rule supplies explicit repository directory prefixes such as `src/` or `scripts/`; only inline-code paths under those prefixes are interpreted as repository references. Paths outside the configured prefixes are ignored, so the toolkit does not reinterpret arbitrary prose, URLs, examples, or application vocabulary as architecture truth.
+
+Generated documentation can bind itself to one or more explicit source files with a SHA256 marker. The auditor recomputes a deterministic digest over source path plus source bytes and compares it with a marker such as `<!-- toolkit-source-sha256: <sha256> -->`. This detects source changes after documentation generation without executing a generator or claiming that matching bytes prove semantic correctness.
+
+```json
+{
+  "version": 1,
+  "documents": ["README.md", "docs/generated.md"],
+  "packageScripts": [
+    { "manifest": "package.json", "documents": ["README.md"] }
+  ],
+  "environmentBindings": [
+    { "contract": "config/environment.json", "documents": ["README.md"] }
+  ],
+  "pathReferenceRules": [
+    { "documents": ["README.md"], "prefixes": ["src/", "scripts/"] }
+  ],
+  "generatedBindings": [
+    { "document": "docs/generated.md", "sources": ["src/schema.ts"], "marker": "toolkit-source-sha256" }
+  ],
+  "severity": {
+    "documentInspection": "FAIL",
+    "commandReference": "FAIL",
+    "environmentReference": "FAIL",
+    "pathReference": "FAIL",
+    "generatedDocument": "FAIL"
+  }
+}
+```
+
+```sh
+bun run audit:docs --root . --policy /private/path/documentation-drift-policy.json
+```
+
+All inspected documents, manifests, contracts, generated sources, and referenced paths must stay inside the repository. Symlinks are not followed and text inspection is bounded to 2 MiB per file. The auditor performs no Git commands, network calls, environment reads, package installation, generator execution, file writes, or automatic documentation edits. Reports identify stale references and paths but never include document contents. Project-specific architecture prefixes, documentation scope, generated source bindings, and severities remain outside the public toolkit.
