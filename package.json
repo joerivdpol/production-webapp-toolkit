@@ -34,6 +34,7 @@
     "runtime:health:evidence": "node scripts/runtime-health-evidence.js",
     "audit:runtime-health": "node scripts/audit-runtime-health.js",
     "runtime:smoke": "node scripts/run-synthetic-smoke-tests.js",
+    "runtime:frontend": "node scripts/run-frontend-runtime-checks.js",
     "ci:evidence": "node scripts/ci-evidence.js",
     "bootstrap": "node scripts/bootstrap-repository.js",
     "remediation:plan": "node scripts/plan-remediation.js",

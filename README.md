@@ -1121,6 +1121,41 @@ bun run runtime:smoke -- --policy /private/path/production-smoke-policy.json --j
 
 The toolkit can enforce what it sends, but it cannot prove that a remote server implements `GET` or `HEAD` without side effects. Smoke policies must therefore target endpoints that the application owner has explicitly designated safe for read-only production observation. The runner performs no login, booking, payment, mutation, shell command, environment inspection, or redirect traversal.
 
+### Frontend runtime checks
+
+`bun run runtime:frontend` opens explicitly configured public routes in a headless Chromium browser and checks production behavior that a status-only probe cannot see. Each route declares its expected status and bounded maximum counts for console errors, uncaught page errors, failed assets, failed requests, hydration markers, Content Security Policy violations, and mutation attempts initiated by the page. Reports retain only counts and stable finding identifiers; console messages, exception payloads, response bodies, and CSP event details are not copied into evidence.
+
+The browser boundary is intentionally narrow. Policy URLs require HTTPS except for loopback HTTP and may not contain user information, query strings, or fragments. The browser starts without configured credentials and with service workers blocked. Intercepted requests permit only `GET`, `HEAD`, and `OPTIONS`; mutation methods are aborted and counted. Cross-origin navigation is blocked, while same-origin redirects and ordinary subresource loading remain available so the page can be observed as users receive it. Hydration detection is policy driven through explicit bounded marker strings rather than framework-specific business assumptions.
+
+```json
+{
+  "version": 1,
+  "suite": "frontend-core",
+  "hydrationMarkers": ["hydration failed", "did not match"],
+  "routes": [
+    {
+      "id": "homepage",
+      "url": "https://example.com/",
+      "expectedStatuses": [200],
+      "timeoutMs": 5000,
+      "maxConsoleErrors": 0,
+      "maxPageErrors": 0,
+      "maxFailedAssets": 0,
+      "maxFailedRequests": 0,
+      "maxHydrationErrors": 0,
+      "maxCspViolations": 0,
+      "maxBlockedMutations": 0
+    }
+  ]
+}
+```
+
+```sh
+bun run runtime:frontend -- --policy /private/path/frontend-runtime-policy.json --json
+```
+
+A frontend runtime failure does not establish deployment identity and does not mutate production state. Application owners remain responsible for selecting routes that are safe to load anonymously.
+
 ```json
 {
   "version": 1,
