@@ -815,3 +815,18 @@ bun run audit:release-risk \
 ```
 
 The adapter only performs local read-only Git inspection against caller-supplied full object ids and reads package manifests from those commits when the policy requests npm major-version analysis. It never checks out commits, mutates the working tree, calls the network, reads environment variables, or generates collection timestamps.
+
+### Policy driven test selection
+
+`bun run test:select` turns Change Surface Evidence v1 into a deterministic test plan without executing any commands. Test Selection Policy v1 declares a generic catalog of test ids, single line commands, and whether each test is blocking. Every blocking test is selected on every run, so surface based optimization cannot silently remove required quality gates. Additional tests are selected by explicit rules over engineering surfaces and the `environmentChanged` or `majorDependencyUpgrade` flags.
+
+A rule may require one or more surfaces, one or more flags, or both. When both are present, at least one configured surface must match and every configured flag must be true. Multiple matching rules accumulate reasons on the same test instead of duplicating it. Commands are returned as data only; the selector has no subprocess execution surface.
+
+```sh
+bun run test:select \
+  --evidence-file ./change-surface-evidence.json \
+  --policy /private/path/test-selection-policy.json \
+  --json > selected-tests.json
+```
+
+The public toolkit does not hardcode project-specific test commands or business domains. Projects and private organization policy decide which generic test ids are blocking and which surface changes require additional checks.
