@@ -1292,3 +1292,46 @@ bun run runtime:seo -- --policy /private/path/seo-policy.json --json
 ```
 
 This gate checks the configured technical SEO surface only. It does not claim search-engine indexing, ranking, content quality, semantic correctness of structured data beyond required type presence, or completeness of every crawler-specific behavior.
+
+### Localization completeness audit
+
+`bun run audit:localization` compares explicit JSON locale catalogs against one configured reference locale. The audit is static, local, and read only. It supports flat catalogs and nested object catalogs with string leaves, reports missing keys as blocking, and applies an explicit `IGNORE`, `WARN`, or `FAIL` policy to extra keys. Code-level unused translation keys remain the responsibility of the separate orphan detector rather than being guessed from catalog structure.
+
+Placeholder parity is explicit. A policy selects one or more supported syntaxes: `{name}`, `{{name}}`, and `%{name}`. Every translated value must retain the same configured placeholder set as the reference value. The audit reports locale id, translation key, and bounded counts only; translation text is never copied into reports.
+
+Fallback leakage is deliberately conservative: it only detects target values that are textually identical to the reference value above a configured minimum length. This is not language detection. Exact-equality exceptions such as brand names can be allowlisted by key. HTML-like tags can independently be ignored, warned, or blocked with a key allowlist.
+
+Currency and formatting rules remain project configuration rather than public-toolkit business logic. A rule can require runtime formatting placeholders for a specific translation key and reject configured literal currency tokens. The public engine contains no currencies, prices, or application-specific canonical values.
+
+```json
+{
+  "version": 1,
+  "referenceLocale": "en",
+  "catalogMode": "nested",
+  "locales": [
+    { "id": "en", "file": "src/i18n/en.json" },
+    { "id": "nl", "file": "src/i18n/nl.json" }
+  ],
+  "placeholderSyntaxes": ["brace", "double-brace", "percent-brace"],
+  "extraKeys": { "severity": "WARN" },
+  "fallback": {
+    "severity": "FAIL",
+    "minimumLength": 8,
+    "allowKeys": ["brand.name"]
+  },
+  "html": { "severity": "FAIL", "allowKeys": [] },
+  "currencyRules": [
+    {
+      "key": "checkout.total",
+      "requiredPlaceholders": ["amount"],
+      "forbiddenLiterals": ["EXAMPLE_CURRENCY_LITERAL"]
+    }
+  ]
+}
+```
+
+```sh
+bun run audit:localization -- --root /path/to/repository --policy /private/path/localization-policy.json --json
+```
+
+Catalog paths must be explicit repository-relative files. Symbolic links are never followed, catalog size is bounded, non-string translation leaves fail closed, and invalid JSON is rejected. The auditor performs no network, Git, environment, subprocess, or repository-write operations.
