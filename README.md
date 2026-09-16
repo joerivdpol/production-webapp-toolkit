@@ -1016,6 +1016,24 @@ The audit uses local `git ls-files` only to enumerate tracked paths and never mu
 
 Collector kinds are deliberately finite: `checkout`, `application`, `container`, and `process`. The resulting Runtime Evidence metadata records both collector kind and identity scope. Checkout collection is explicitly labeled `checkout` and is not silently upgraded to process identity. Application supplied identity becomes `application-reported`, while container and process collectors remain separately labeled.
 
+### Local Git checkout runtime evidence
+
+`bun run runtime:checkout:collect` is the concrete local Git checkout collector. It reads only an explicitly supplied local worktree, resolves its full `HEAD` object ID, and then emits canonical Runtime Evidence v1 through the shared runtime collector adapter. Its evidence source is `local-git-checkout`, authentication is always `false`, and metadata always retains `collector.kind: checkout` plus `identityScope: checkout`. This is evidence about a filesystem checkout, not evidence that a running process, container, or deployed application is executing that commit.
+
+The collector fails closed when the target is not a readable Git worktree, `HEAD` is not a full Git object ID, or the checkout contains tracked or untracked changes. That clean-worktree requirement prevents a commit hash from being presented as if it fully described filesystem contents when local modifications are present. File names from dirty status output are not copied into errors or evidence.
+
+Git inspection is local and read only. The collector invokes only `rev-parse` and `status`, disables optional Git locks and filesystem-monitor hooks, performs no fetch or remote lookup, and never changes checkout state. Collection time is generated only after the Git identity and cleanliness checks succeed; it represents the actual evidence collection event rather than inferred runtime freshness.
+
+```sh
+bun run runtime:checkout:collect -- \
+  --repository /path/to/checkout \
+  --runtime-name example-checkout \
+  --environment production \
+  --json > runtime-checkout-evidence.json
+```
+
+The resulting JSON can be passed to the existing deployment and repository-status evidence flows. Deployment verification preserves the collector kind and identity scope, may still report the commit comparison itself as `MATCH`, but lowers overall readiness to `WARN` for checkout-scoped evidence because a matching checkout does not establish that an application, container, or process is actually running that commit.
+
 ```json
 {
   "version": 1,

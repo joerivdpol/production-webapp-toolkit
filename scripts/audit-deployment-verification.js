@@ -23,7 +23,7 @@ import { isAbsoluteIsoTimestamp, isFullObjectId as isCanonicalFullObjectId, vali
  *   evidence?: DeploymentEvidence
  * }} DeploymentOptions
  */
-/** @typedef {{ type: "explicit-commit", source: "caller-supplied", authenticated: false } | { type: "runtime-evidence", source: string, authenticated: boolean, collectedAt: string, runtime: { name: string, environment?: string } }} DeploymentEvidence */
+/** @typedef {{ type: "explicit-commit", source: "caller-supplied", authenticated: false } | { type: "runtime-evidence", source: string, authenticated: boolean, collectedAt: string, runtime: { name: string, environment?: string }, collector?: { kind: "checkout"|"application"|"container"|"process", identityScope: "checkout"|"application-reported"|"container"|"process" } }} DeploymentEvidence */
 /**
  * @typedef {{
  *   root: string,
@@ -231,7 +231,9 @@ function deriveOverallStatus(report) {
           ? "WARN"
           : report.runtimeIdentity.configured && report.runtimeIdentity.status !== "MATCH"
             ? "WARN"
-            : "PASS";
+            : report.evidence.type === "runtime-evidence" && report.evidence.collector?.identityScope === "checkout"
+              ? "WARN"
+              : "PASS";
   return report;
 }
 
@@ -249,8 +251,27 @@ function deploymentEvidence(options) {
   };
 }
 
+/** @param {import("./runtime-evidence.js").RuntimeEvidence} evidence */
+function runtimeCollectorMetadata(evidence) {
+  const collector = evidence.metadata?.collector;
+  if (typeof collector !== "object" || collector === null || Array.isArray(collector)) return null;
+  const collectorRecord = /** @type {Record<string, unknown>} */ (collector);
+  const kind = collectorRecord.kind;
+  const identityScope = collectorRecord.identityScope;
+  /** @type {Record<string, string>} */
+  const expected = {
+    checkout: "checkout",
+    application: "application-reported",
+    container: "container",
+    process: "process",
+  };
+  if (typeof kind !== "string" || !(kind in expected) || identityScope !== expected[kind]) return null;
+  return /** @type {{ kind:"checkout"|"application"|"container"|"process", identityScope:"checkout"|"application-reported"|"container"|"process" }} */ ({ kind, identityScope });
+}
+
 /** @param {import("./runtime-evidence.js").RuntimeEvidence} evidence @returns {DeploymentEvidence} */
 function runtimeEvidenceTrustMetadata(evidence) {
+  const collector = runtimeCollectorMetadata(evidence);
   return {
     type: "runtime-evidence",
     source: evidence.evidence.source,
@@ -260,6 +281,24 @@ function runtimeEvidenceTrustMetadata(evidence) {
       name: evidence.runtime.name,
       ...(evidence.runtime.environment === undefined ? {} : { environment: evidence.runtime.environment }),
     },
+    ...(collector ? { collector } : {}),
+  };
+}
+
+/** @param {DeploymentEvidence} evidence @returns {DeploymentCheck | null} */
+function evidenceIdentityScopeCheck(evidence) {
+  if (evidence.type !== "runtime-evidence" || !evidence.collector) return null;
+  if (evidence.collector.identityScope === "checkout") {
+    return {
+      id: "evidence-identity-scope",
+      severity: "WARN",
+      detail: "runtime evidence identifies a local checkout only; it does not establish application, container, or process deployment identity",
+    };
+  }
+  return {
+    id: "evidence-identity-scope",
+    severity: "PASS",
+    detail: `runtime evidence declares ${evidence.collector.identityScope} identity scope; this auditor preserves but does not authenticate that scope claim`,
   };
 }
 
@@ -361,6 +400,8 @@ function inspectNormalizedDeploymentVerification(target, options) {
   if (evidenceFreshnessCheck) report.checks.push(evidenceFreshnessCheck);
   const identityCheck = runtimeIdentityCheck(report.runtimeIdentity);
   if (identityCheck) report.checks.push(identityCheck);
+  const identityScopeCheck = evidenceIdentityScopeCheck(report.evidence);
+  if (identityScopeCheck) report.checks.push(identityScopeCheck);
 
   if (report.technicalStatus === "FAIL") {
     report.checks.push({
@@ -512,7 +553,7 @@ export function inspectDeploymentVerificationFromEvidenceFile(target, options) {
 export function formatDeploymentVerification(report) {
   const evidenceDescription =
     report.evidence.type === "runtime-evidence"
-      ? `validated Runtime Evidence Contract v1; source: ${report.evidence.source}; authenticated: ${report.evidence.authenticated}; collected at: ${report.evidence.collectedAt}; runtime: ${report.evidence.runtime.name}${report.evidence.runtime.environment === undefined ? "" : `; environment: ${report.evidence.runtime.environment}`}`
+      ? `validated Runtime Evidence Contract v1; source: ${report.evidence.source}; authenticated: ${report.evidence.authenticated}; collected at: ${report.evidence.collectedAt}; runtime: ${report.evidence.runtime.name}${report.evidence.runtime.environment === undefined ? "" : `; environment: ${report.evidence.runtime.environment}`}${report.evidence.collector ? `; collector: ${report.evidence.collector.kind}; identity scope: ${report.evidence.collector.identityScope}` : ""}`
       : "caller supplied; unauthenticated";
   const freshnessDescription = report.freshness.configured
     ? `${report.freshness.status}; age: ${report.freshness.ageSeconds}s; max: ${report.freshness.maxAgeSeconds}s; evaluated at: ${report.freshness.evaluatedAt}`
