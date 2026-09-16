@@ -31,6 +31,8 @@
     "runtime:application:collect": "node scripts/collect-application-runtime-evidence.js",
     "runtime:container:collect": "node scripts/collect-docker-container-runtime-evidence.js",
     "runtime:process:collect": "node scripts/collect-process-runtime-evidence.js",
+    "runtime:health:evidence": "node scripts/runtime-health-evidence.js",
+    "audit:runtime-health": "node scripts/audit-runtime-health.js",
     "ci:evidence": "node scripts/ci-evidence.js",
     "bootstrap": "node scripts/bootstrap-repository.js",
     "remediation:plan": "node scripts/plan-remediation.js",

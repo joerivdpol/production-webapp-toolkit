@@ -1078,6 +1078,21 @@ bun run runtime:process:collect -- \
 
 Both collectors emit `authenticated: false`. A Docker daemon observation or a live local socket response provides stronger runtime binding than checkout evidence, but the toolkit does not claim cryptographic authenticity that it did not verify. Collector kind, identity scope, source, and collection time remain visible in canonical Runtime Evidence v1 and in deployment verification.
 
+### Runtime health evidence and policy audit
+
+`bun run runtime:health:evidence` validates Runtime Health Evidence v1. Health evidence is deliberately separate from Runtime Evidence v1: it names a runtime and contains bounded health observations, but it contains no deployment commit and therefore cannot establish which build is deployed. Supported generic categories are `http`, `database`, `upstream`, `queue`, `job`, and `custom`; each observation is one of `HEALTHY`, `DEGRADED`, `UNHEALTHY`, or `UNKNOWN`, with an optional bounded latency in milliseconds. Arbitrary detail payloads are rejected so health evidence does not become a channel for secrets or provider-specific response bodies.
+
+`bun run audit:runtime-health` evaluates explicit health evidence against a version 1 policy. The policy binds the expected runtime identity, a mandatory maximum evidence age, freshness severity, and explicit blocking or advisory requirements per health-check id. A configured degraded state is only tolerated when `allowDegraded` is explicit, and it still remains a warning. Missing, unhealthy, unknown, stale, future-dated, and wrong-runtime evidence stay visible with stable `PASS`, `WARN`, and `FAIL` semantics. Extra nonhealthy observations are warnings rather than being silently ignored.
+
+```sh
+bun run runtime:health:evidence -- --file ./runtime-health.json --json
+bun run audit:runtime-health -- \
+  --evidence-file ./runtime-health.json \
+  --policy /private/path/runtime-health-policy.json
+```
+
+Authentication metadata is reported but never changes health truth. The health audit is offline and read only, and its report explicitly states `Deployment identity: NOT EVALUATED`; deployment identity and health can therefore disagree without either dimension overwriting the other.
+
 ```json
 {
   "version": 1,

@@ -106,9 +106,10 @@ Core principles:
 * Runtime Collector Observation v1 and shared adapter to canonical Runtime Evidence Contract v1 with explicit checkout, application-reported, container, and process identity scopes: merged.
 * Clean local Git checkout Runtime Evidence collector with explicit checkout-only identity scope: merged.
 * Application-reported build identity collector for bounded local JSON files and explicit no-redirect version endpoints: merged.
-* Running Docker container revision-label collector and live local process socket collector: implementation complete on the active capability branch.
-* Runtime evidence freshness policy with stale and future-evidence warnings: already merged and active in deployment, repository, and ecosystem status flows.
-* Runtime health, synthetic, frontend, and remaining operational assurance capabilities remain open.
+* Running Docker container revision-label collector and live local process socket collector: merged.
+* Runtime evidence freshness policy with stale and future-evidence warnings: merged and active in deployment, repository, and ecosystem status flows.
+* Provider-neutral Runtime Health Evidence v1 and explicit freshness/check policy audit, intentionally separate from deployment identity: implementation complete on the active capability branch.
+* Synthetic, frontend, and remaining operational assurance capabilities remain open.
 
 35. Add runtime evidence collectors as separate adapters that emit Runtime Evidence Contract documents.
 36. Support local Git checkout evidence while clearly labeling it as checkout evidence, not process identity.
