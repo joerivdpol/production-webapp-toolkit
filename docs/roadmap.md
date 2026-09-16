@@ -111,7 +111,8 @@ Core principles:
 * Provider-neutral Runtime Health Evidence v1 and explicit freshness/check policy audit, intentionally separate from deployment identity: merged.
 * HTTPS-first synthetic production smoke runner with GET/HEAD-only requests, no redirects or credentials, bounded JSON assertions, and explicit read-only endpoint ownership boundary: merged.
 * Browser-based frontend runtime checks for route status, console/page errors, failed requests/assets, hydration markers, CSP violations, and blocked mutation attempts: merged.
-* Performance budgets and the remaining operational assurance capabilities remain open.
+* Provider-neutral Performance Evidence v1 with exact commit/freshness binding and explicit bundle, LCP, CLS, and INP budget audit: merged.
+* Accessibility gates and the remaining operational assurance capabilities remain open.
 
 35. Add runtime evidence collectors as separate adapters that emit Runtime Evidence Contract documents.
 36. Support local Git checkout evidence while clearly labeling it as checkout evidence, not process identity.

@@ -1156,6 +1156,43 @@ bun run runtime:frontend -- --policy /private/path/frontend-runtime-policy.json 
 
 A frontend runtime failure does not establish deployment identity and does not mutate production state. Application owners remain responsible for selecting routes that are safe to load anonymously.
 
+### Performance evidence and budgets
+
+`bun run performance:evidence` validates provider-neutral Performance Evidence v1. Evidence is bound to an exact source commit and contains only bounded numeric bundle measurements plus selected route metrics: Largest Contentful Paint in milliseconds, Cumulative Layout Shift, and Interaction to Next Paint in milliseconds. Route URLs, response bodies, traces, screenshots, and provider payloads are deliberately outside the contract. A route may omit metrics that were not measured, but it must contain at least one metric.
+
+`bun run audit:performance` applies an explicit version 1 budget to that evidence. Bundle limits may independently cap total, JavaScript, and CSS bytes. Route budgets may independently cap LCP, CLS, and INP. The audit also requires the exact expected commit and an explicit evaluation time, so stale, future-dated, or wrong-commit evidence cannot silently satisfy a release budget. Missing configured routes and missing metrics required by policy fail closed. Authentication metadata remains trust metadata only and never changes numeric budget truth.
+
+```json
+{
+  "version": 1,
+  "maxEvidenceAgeSeconds": 3600,
+  "bundle": {
+    "maxTotalBytes": 800000,
+    "maxJsBytes": 500000,
+    "maxCssBytes": 150000
+  },
+  "routes": [
+    {
+      "id": "homepage",
+      "maxLcpMs": 2500,
+      "maxCls": 0.1,
+      "maxInpMs": 200
+    }
+  ]
+}
+```
+
+```sh
+bun run performance:evidence -- --file ./performance-evidence.json --json
+bun run audit:performance -- \
+  --evidence-file ./performance-evidence.json \
+  --policy /private/path/performance-policy.json \
+  --expected-commit 0123456789abcdef0123456789abcdef01234567 \
+  --evaluated-at 2026-09-17T02:00:00+07:00
+```
+
+The evidence validator and budget auditor are offline and read only. Measurement collection remains provider-specific and separate from the public generic budget engine.
+
 ```json
 {
   "version": 1,
