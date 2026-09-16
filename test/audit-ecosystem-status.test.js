@@ -122,9 +122,34 @@ function runCli(...args) {
   return spawnSync("node", [path.resolve("scripts/audit-ecosystem-status.js"), ...args], { encoding: "utf8" });
 }
 
-/** @param {Array<{ name?: string, path: string, expectedRef?: string, expectedCommit?: string, compareRef?: string }>} repositories */
+/** @param {Array<{ name?: string, path: string, expectedRef?: string, expectedCommit?: string, compareRef?: string, deployedCommit?: string, evidenceFile?: string }>} repositories */
 function config(repositories) {
   return configFile({ version: 1, repositories });
+}
+
+/** @param {string} commit @param {{ authenticated?: boolean, environment?: string | null }} [options] */
+function runtimeEvidence(commit, options = {}) {
+  return {
+    version: 1,
+    runtime: {
+      name: "runtime-a",
+      ...(options.environment === null ? {} : { environment: options.environment ?? "example-production" }),
+    },
+    deployment: { commit },
+    evidence: {
+      source: "manual",
+      authenticated: options.authenticated ?? false,
+      collectedAt: "2026-09-16T00:00:00Z",
+    },
+  };
+}
+
+/** @param {unknown} value */
+function evidenceFile(value) {
+  const directory = temporaryDirectory("ecosystem-status-evidence-");
+  const file = path.join(directory, "runtime-evidence.json");
+  fs.writeFileSync(file, typeof value === "string" ? value : JSON.stringify(value));
+  return file;
 }
 
 afterEach(() => {
@@ -232,6 +257,114 @@ test("unsupported profiles fail quality and config entries retain independent se
   assert.equal(report.repositories[1]?.dimensions.baseline.expectedRef, "main");
 });
 
+test("configured direct deployments can make the ecosystem fully PASS", () => {
+  const webapp = createWebapp();
+  const python = createPythonService();
+  assert.ok(webapp.initial);
+  assert.ok(python.initial);
+  const result = runCli("--config", config([
+    { name: "app-a", path: webapp.root, expectedRef: "main", deployedCommit: webapp.initial },
+    { name: "worker-b", path: python.root, expectedRef: "main", deployedCommit: python.initial },
+  ]), "--json");
+  /** @type {{ overallStatus: string, repositories: Array<{ dimensions: { deployment: { deploymentStatus: string } } }>, summary: { deployment: Record<string, number> } }} */
+  const report = JSON.parse(result.stdout);
+
+  assert.equal(result.status, 0);
+  assert.equal(report.overallStatus, "PASS");
+  assert.deepEqual(report.repositories.map((repository) => repository.dimensions.deployment.deploymentStatus), ["MATCH", "MATCH"]);
+  assert.deepEqual(report.summary.deployment, { pass: 2, warn: 0, fail: 0, notConfigured: 0 });
+});
+
+test("runtime evidence paths are config-relative and retain canonical trust metadata", () => {
+  const webapp = createWebapp();
+  assert.ok(webapp.initial);
+  const directory = temporaryDirectory("ecosystem-status-relative-evidence-");
+  const evidencePath = path.join(directory, "runtime-evidence.json");
+  const configPath = path.join(directory, "ecosystem-status.json");
+  fs.writeFileSync(evidencePath, JSON.stringify(runtimeEvidence(webapp.initial, { authenticated: true })));
+  fs.writeFileSync(configPath, JSON.stringify({
+    version: 1,
+    repositories: [{
+      name: "app-a",
+      path: webapp.root,
+      expectedRef: "main",
+      evidenceFile: "./runtime-evidence.json",
+    }],
+  }));
+  const before = fs.readFileSync(evidencePath, "utf8");
+  const result = runCli("--config", configPath, "--json");
+  const report = JSON.parse(result.stdout);
+  const evidence = report.repositories[0]?.dimensions.deployment.evidence;
+
+  assert.equal(result.status, 0);
+  assert.equal(report.overallStatus, "PASS");
+  assert.equal(report.repositories[0]?.dimensions.deployment.deploymentStatus, "MATCH");
+  assert.equal(evidence?.type, "runtime-evidence");
+  assert.equal(evidence?.authenticated, true);
+  assert.equal(evidence?.source, "manual");
+  assert.equal(evidence?.runtime?.name, "runtime-a");
+  assert.equal(fs.readFileSync(evidencePath, "utf8"), before);
+  const parsed = parseEcosystemConfig(JSON.parse(fs.readFileSync(configPath, "utf8")), directory);
+  assert.equal("error" in parsed, false);
+  if (!("error" in parsed)) assert.equal(parsed.repositories[0]?.evidenceFile, evidencePath);
+});
+test("deployment mismatch and unavailable baselines remain aggregated warnings", () => {
+  const mismatch = createWebapp();
+  assert.ok(mismatch.initial);
+  writeCommit(mismatch.root, "next");
+  const unverified = createWebapp();
+  assert.ok(unverified.initial);
+
+  const report = inspectEcosystemStatus([
+    {
+      name: "mismatch",
+      target: mismatch.root,
+      expectedRef: "main",
+      deployedCommit: mismatch.initial,
+    },
+    {
+      name: "unverified",
+      target: unverified.root,
+      expectedRef: "origin/not-locally-available",
+      deployedCommit: unverified.initial,
+    },
+  ], { inputMode: "config", configVersion: 1 });
+
+  assert.deepEqual(report.repositories.map((repository) => repository.dimensions.deployment.deploymentStatus), ["MISMATCH", "UNVERIFIED"]);
+  assert.deepEqual(report.summary.deployment, { pass: 0, warn: 2, fail: 0, notConfigured: 0 });
+  assert.equal(report.technicalStatus, "PASS");
+  assert.equal(report.overallStatus, "WARN");
+});
+test("invalid runtime evidence is isolated to its repository while later repositories still run", () => {
+  const invalid = createWebapp();
+  const good = createWebapp();
+  assert.ok(invalid.initial);
+  assert.ok(good.initial);
+  const invalidEvidence = evidenceFile(runtimeEvidence("HEAD"));
+
+  const report = inspectEcosystemStatus([
+    {
+      name: "invalid-evidence",
+      target: invalid.root,
+      expectedRef: "main",
+      evidenceFile: invalidEvidence,
+    },
+    {
+      name: "good",
+      target: good.root,
+      expectedRef: "main",
+      deployedCommit: good.initial,
+    },
+  ], { inputMode: "config", configVersion: 1 });
+
+  assert.equal(report.repositories[0]?.overallStatus, "FAIL");
+  assert.equal(report.repositories[0]?.dimensions.deployment.status, "FAIL");
+  assert.equal(report.repositories[1]?.overallStatus, "PASS");
+  assert.equal(report.repositories[1]?.dimensions.deployment.deploymentStatus, "MATCH");
+  assert.deepEqual(report.summary.deployment, { pass: 1, warn: 0, fail: 1, notConfigured: 0 });
+  assert.equal(report.overallStatus, "FAIL");
+});
+
 test("config entry without a selector is NOT_CONFIGURED", () => {
   const webapp = createWebapp();
   const result = runCli("--config", config([{ path: webapp.root }]), "--json");
@@ -249,6 +382,10 @@ test("config validation rejects invalid contracts and duplicate resolved targets
     { version: 2, repositories: [{ path: target }] },
     { version: 1, repositories: [] },
     { version: 1, repositories: [{ path: target, compareRef: "HEAD" }] },
+    { version: 1, repositories: [{ path: target, deployedCommit: "0123456789abcdef0123456789abcdef01234567" }] },
+    { version: 1, repositories: [{ path: target, expectedRef: "main", deployedCommit: "HEAD" }] },
+    { version: 1, repositories: [{ path: target, expectedRef: "main", deployedCommit: "0123456789abcdef0123456789abcdef01234567", evidenceFile: "runtime-evidence.json" }] },
+    { version: 1, repositories: [{ path: target, expectedRef: "main", evidenceFile: "" }] },
     { version: 1, repositories: [{ path: target }, { path: target }] },
   ];
 
@@ -257,7 +394,7 @@ test("config validation rejects invalid contracts and duplicate resolved targets
     assert.equal(result.status, 1);
   }
   assert.deepEqual(parseEcosystemConfig({ version: 1, repositories: [{ path: "relative" }] }, "/tmp"), {
-    repositories: [{ target: "/tmp/relative", expectedRef: null, expectedCommit: null, compareRef: null }],
+    repositories: [{ target: "/tmp/relative", expectedRef: null, expectedCommit: null, compareRef: null, deployedCommit: null, evidenceFile: null }],
   });
 });
 
@@ -305,16 +442,20 @@ test("JSON output, aggregate summary, order, and human scorecard are stable", ()
     quality: { pass: 2, fail: 1 },
     governance: { pass: 3, warn: 0, fail: 0 },
     baseline: { pass: 2, warn: 0, fail: 0, notConfigured: 1 },
+    deployment: { pass: 0, warn: 0, fail: 0, notConfigured: 3 },
     profiles: { webapp: 3, "python-service": 0, unknown: 0 },
   });
-  assert.match(rendered, /REPOSITORY.*QUALITY.*GOVERNANCE.*BASELINE.*OVERALL/);
+  assert.match(rendered, /REPOSITORY.*QUALITY.*GOVERNANCE.*BASELINE.*DEPLOYMENT.*OVERALL/);
   assert.match(rendered, /first/);
   assert.match(rendered, /Result: FAIL/);
   assert.equal(main([passing.root]), 0);
 });
 
-test("the aggregator has no local Git command surface", () => {
+test("the aggregator delegates canonical status rules and has no local Git command surface", () => {
   const source = fs.readFileSync(path.resolve("scripts/audit-ecosystem-status.js"), "utf8");
   assert.match(source, /inspectRepositoryStatus/);
+  assert.match(source, /isFullObjectId/);
+  assert.doesNotMatch(source, /validateRuntimeEvidence/);
+  assert.doesNotMatch(source, /[0-9a-fA-F]\{40\}/);
   assert.doesNotMatch(source, /node:child_process|spawnSync|execFile|\["git"/);
 });
