@@ -67,8 +67,9 @@ Core principles:
 * Policy-driven test selection with an always-selected blocking baseline and surface/flag-triggered additional tests: merged.
 * Policy-driven flaky check detection from repeated canonical CI Evidence v1 with explicit observation thresholds and blocking/advisory severity: merged.
 * Coverage Comparison Evidence v1 with changed-file minimum/regression gates and aggregate critical-module coverage policy: merged.
-* Provider-neutral Orphan Evidence v1, local TypeScript/JSON static collector, and explicit dead-code/orphan policy audit covering exports, routes, feature flags, translations, and handlers: implementation complete on the active capability branch.
-* Repository hygiene and the remaining production-readiness capabilities remain open.
+* Provider-neutral Orphan Evidence v1, local TypeScript/JSON static collector, and explicit dead-code/orphan policy audit covering exports, routes, feature flags, translations, and handlers: merged.
+* Repository Hygiene Policy v1 with stale configuration, duplicate configuration, generated artifact, duplicate workflow, and oversized tracked-file checks: implementation complete on the active capability branch.
+* Documentation drift, ownership policy, and the remaining production-readiness capabilities remain open.
 
 10. Add CI evidence for the exact commit being evaluated, including tests, typecheck, lint, and build outcomes.
 11. Add read only GitHub branch protection and ruleset auditing.
