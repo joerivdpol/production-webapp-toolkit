@@ -697,3 +697,35 @@ bun run sbom:generate \
 ```
 
 The generator fails closed on unsupported lockfile structure, ambiguous direct dependency resolution, symlinked evidence files, floating Bun or Node toolchains, malformed release identity, and malformed package identities. Missing package integrity remains explicit as `toolkit:packageIntegrity=unavailable`; no hash is synthesized. The generator performs no Git, network, environment, subprocess, installation, or repository-write operation.
+
+### Dependency license evidence and policy audit
+
+`bun run license:collect:installed` collects package license declarations from an installed dependency tree and binds them to the exact package identities in a CycloneDX 1.7 release SBOM. The collector never substitutes a different installed package version when the SBOM target is missing. Missing exact packages or unsupported license declarations remain `UNKNOWN` evidence.
+
+Collection is local and read only. `node_modules` must be a real directory rather than a symlink. Package-directory symlinks are not followed, nested `node_modules` trees are scanned within explicit safety bounds, and conflicting license declarations for the same exact `name@version` fail closed. The canonical License Evidence Contract v1 carries the artifact name, version, SHA256, source commit, evidence timestamp, dependency relationship, exact package version, and declared license expression.
+
+`bun run audit:licenses` compares that evidence with an explicit version 1 engineering policy. Policy can include selected dependency relationships, exact allowed expressions, exact denied expressions, and WARN or FAIL behavior for unknown and unlisted expressions. Expressions are matched exactly after whitespace normalization. The toolkit does not decide that two different SPDX expressions are legally equivalent, resolve dual licensing choices, or provide a legal conclusion about license obligations.
+
+```json
+{
+  "version": 1,
+  "includedRelationships": ["direct-production", "transitive"],
+  "allowedExpressions": ["MIT", "Apache-2.0", "BSD-3-Clause"],
+  "deniedExpressions": ["GPL-3.0-only"],
+  "unknownStatus": "FAIL",
+  "unlistedStatus": "WARN"
+}
+```
+
+```sh
+bun run license:collect:installed \
+  --root /path/to/repository \
+  --sbom-file ./release.cdx.json \
+  --collected-at 2026-09-16T15:45:00Z \
+  --json > license-evidence.json
+
+bun run license:evidence --file ./license-evidence.json
+bun run audit:licenses --evidence-file ./license-evidence.json --policy /private/path/license-policy.json
+```
+
+The evidence validator and audit core perform no network, Git, environment, subprocess, installation, repository write, or provider mutation operation. Source authentication metadata is retained as trust metadata and does not change the exact-expression policy result.
