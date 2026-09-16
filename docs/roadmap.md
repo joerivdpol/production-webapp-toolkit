@@ -35,8 +35,8 @@ Core principles:
 * Ecosystem status deployment dimension: merged.
 * Evidence freshness: merged.
 * Runtime identity binding: merged.
-* Reproducible toolchain and v1.1 release-readiness gate: implemented; awaiting merge.
-* Final v1.1.0 version bump, release PR, tag, and published release remain open.
+* Reproducible toolchain and v1.1 release-readiness gate: merged.
+* Final v1.1.0 version bump and release candidate: prepared; merge, tag, and published release remain.
 
 ## v1.2 Production readiness
 
