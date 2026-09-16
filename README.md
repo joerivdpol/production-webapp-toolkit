@@ -1611,3 +1611,41 @@ bun run audit:jobs -- \
 The audit uses canonical TypeScript AST call evidence, so comments and strings do not satisfy controls. It supports centralized wrappers by allowing evidence files to differ from handler files. This remains structural evidence only: it does not independently prove scheduler delivery, distributed lock correctness, timeout enforcement, retry backoff, dead-letter durability, or actual runtime non-overlap.
 
 The capability is local and read only. It does not start jobs, inspect runtime environment values, contact schedulers or queues, execute source code, or mutate repository or production state. Source payloads are not copied into reports.
+
+### Backup readiness evidence and audit
+
+`bun run backup:evidence` validates provider-neutral Backup Readiness Evidence v1. Evidence records, per configured system, the latest backup completion time, backup result, encryption boolean, and latest restore-test time/result. It also carries explicit source, authentication, and collection-time metadata. Authentication remains trust metadata only and never converts a failed or stale backup into a pass.
+
+`bun run audit:backup-readiness` evaluates that evidence against explicit project policy at a caller-supplied absolute `evaluatedAt` timestamp. Using an explicit evaluation clock keeps freshness decisions deterministic and reproducible.
+
+Each system policy specifies the maximum accepted backup age, whether encryption evidence is required, a repository-relative restore-instructions path, and the maximum accepted restore-test age. The restore-instructions check verifies only that the configured path is a non-empty regular non-symlink file; it does not read or judge the procedure contents.
+
+```json
+{
+  "version": 1,
+  "systems": [
+    {
+      "id": "primary-db",
+      "maxBackupAgeMinutes": 1440,
+      "requireEncrypted": true,
+      "restoreInstructionsPath": "docs/restore.md",
+      "maxRestoreTestAgeMinutes": 43200
+    }
+  ]
+}
+```
+```sh
+bun run backup:evidence -- --file ./backup-readiness-evidence.json --json
+bun run audit:backup-readiness -- \
+  --root /path/to/repository \
+  --policy /private/path/backup-readiness-policy.json \
+  --evidence ./backup-readiness-evidence.json \
+  --evaluated-at 2026-09-17T00:10:00Z \
+  --json
+```
+
+The audit keeps independent findings for latest backup success, backup freshness, encryption policy, restore-instruction presence, restore-test success, and restore-test freshness. Evidence timestamps later than collection or evaluation time fail closed. An explicit policy that permits unencrypted backups remains visible as `WARN` and makes no encryption claim.
+
+A passing report does not independently inspect backup contents, cryptographic implementation, retention, restore completeness, or actual recoverability. It means only that the supplied evidence and repository instruction-file presence satisfy explicit policy bounds.
+
+Both commands are local and read only. They do not access backup storage, restore databases, execute runbooks, inspect runtime environment values, or mutate repository or production state. Restore-instruction contents are not copied into reports.
