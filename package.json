@@ -26,6 +26,7 @@
     "audit:ci": "node scripts/audit-ci-verification.js",
     "audit:release": "node scripts/audit-release-readiness.js",
     "runtime:evidence": "node scripts/runtime-evidence.js",
+    "runtime:collector:adapt": "node scripts/runtime-collector-adapter.js",
     "ci:evidence": "node scripts/ci-evidence.js",
     "bootstrap": "node scripts/bootstrap-repository.js",
     "remediation:plan": "node scripts/plan-remediation.js",
