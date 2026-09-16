@@ -7,6 +7,11 @@ import { pathToFileURL } from "node:url";
 const CONTRACT_VERSION = 1;
 const COMMIT_PATTERN = /^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/;
 const ISO_TIMESTAMP_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+
+/** @param {unknown} value */
+export function isFullObjectId(value) {
+  return typeof value === "string" && COMMIT_PATTERN.test(value);
+}
 const SENSITIVE_METADATA_KEY_COMPONENTS = new Set([
   "token",
   "tokens",
@@ -195,7 +200,7 @@ export function validateRuntimeEvidence(value) {
     const commit = normalizeString(deployment.commit);
     if (!("commit" in deployment)) {
       errors.push({ id: "deployment-commit-missing", detail: "deployment.commit is required" });
-    } else if (commit === null || !COMMIT_PATTERN.test(commit)) {
+    } else if (commit === null || !isFullObjectId(commit)) {
       errors.push({ id: "deployment-commit-invalid", detail: "deployment.commit must be a full 40- or 64-character hexadecimal Git object ID" });
     } else {
       normalizedDeployment.commit = commit.toLowerCase();

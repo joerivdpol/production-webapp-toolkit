@@ -36,9 +36,15 @@ Core principles:
 * Evidence freshness: merged.
 * Runtime identity binding: merged.
 * Reproducible toolchain and v1.1 release-readiness gate: merged.
-* Final v1.1.0 version bump and release candidate: prepared; merge, tag, and published release remain.
+* v1.1.0 released and published.
 
 ## v1.2 Production readiness
+
+### Current v1.2 progress
+
+* CI Evidence Contract v1 and explicit CI verification: implementation in progress.
+* Repository and ecosystem CI status integration remain open.
+* Provider collection, GitHub protection auditing, and the remaining production-readiness capabilities remain open.
 
 10. Add CI evidence for the exact commit being evaluated, including tests, typecheck, lint, and build outcomes.
 11. Add read only GitHub branch protection and ruleset auditing.

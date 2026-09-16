@@ -835,7 +835,7 @@ test("the deployment layer reuses the canonical validator and adds no runtime or
   const source = fs.readFileSync(path.resolve("scripts/audit-deployment-verification.js"), "utf8");
 
   assert.match(source, /inspectProductionBaseline/);
-  assert.match(source, /import \{ isAbsoluteIsoTimestamp, validateRuntimeEvidence \} from "\.\/runtime-evidence\.js"/);
+  assert.match(source, /import \{ isAbsoluteIsoTimestamp, isFullObjectId as isCanonicalFullObjectId, validateRuntimeEvidence \} from "\.\/runtime-evidence\.js"/);
   assert.match(source, /validateRuntimeEvidence\(input\)/);
   for (const forbidden of ["child_process", "spawnSync", "execFile", "readGit", "fetch", "process.env", "Date.now", "https://", "http://"]) {
     assert.equal(source.includes(forbidden), false, `forbidden ${forbidden} surface`);
