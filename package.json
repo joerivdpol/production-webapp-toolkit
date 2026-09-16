@@ -48,7 +48,9 @@
     "audit:schema-drift": "node scripts/audit-database-schema-drift.js",
     "security:snapshot": "node scripts/postgres-security-snapshot.js",
     "security:snapshot:postgres:collect": "node scripts/collect-postgres-security-snapshot.js",
-    "audit:postgres-security": "node scripts/audit-postgres-security.js"
+    "audit:postgres-security": "node scripts/audit-postgres-security.js",
+    "api:contract": "node scripts/api-contract-snapshot.js",
+    "audit:api-contract": "node scripts/audit-api-contract.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",

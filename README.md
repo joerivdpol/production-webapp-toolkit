@@ -570,3 +570,19 @@ The collector accepts only an explicit libpq service and explicit schemas. It ru
 bun run security:snapshot:postgres:collect --service production-audit --identity-name primary-database --environment production --schema public --json > postgres-security.json
 bun run audit:postgres-security --snapshot-file ./postgres-security.json --policy /private/path/postgres-security-policy.json
 ```
+
+### API Contract Snapshot and compatibility audit
+
+`bun run api:contract` validates API Contract Snapshot v1. `bun run audit:api-contract` compares an explicit baseline snapshot with an explicit candidate snapshot. The core engine is provider neutral and does not infer contracts from application code or network traffic.
+
+Snapshot v1 covers HTTP method and path, path/query/header parameters, optional request bodies, response status plus media type, and a deliberately bounded JSON schema subset: primitive types, nullability, scalar enums, objects with explicit `additionalProperties`, required properties, and arrays. Unsupported fields and malformed path parameter bindings are rejected rather than guessed.
+
+Compatibility is directional. A candidate request contract must continue accepting every input accepted by the baseline. Making parameters or bodies required, narrowing nullability or enums, changing request media type, or otherwise narrowing request schemas is blocking `FAIL`. Candidate responses must remain within what baseline clients were told to accept; widening response enums/nullability, removing required response fields, opening a closed object, changing existing types, or removing a baseline response contract is blocking `FAIL`.
+
+Adding an operation is compatible. Adding another response status/media contract is reported as `WARN` because existing clients may not have modeled that outcome even though no baseline response was removed. Evidence authentication metadata remains trust metadata and never changes compatibility truth. The comparator reads only explicit JSON files and performs no network, Git, environment, command, or repository write operation.
+
+```sh
+bun run api:contract --file ./baseline-api.json
+bun run api:contract --file ./candidate-api.json
+bun run audit:api-contract --baseline-file ./baseline-api.json --candidate-file ./candidate-api.json
+```
