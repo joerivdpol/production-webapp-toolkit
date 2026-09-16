@@ -638,3 +638,35 @@ bun run audit:drift /path/to/app-one /path/to/app-two --policy /private/path/run
 ```
 
 The human report includes an ecosystem matrix for high-value framework, runtime, client-library, and test-tool versions. The audit is local and read only: it reads repository metadata files only and performs no install, package-manager, network, Git mutation, or runtime probe.
+
+### Vulnerability evidence and policy audit
+
+`bun run vulnerability:evidence` validates provider-neutral Vulnerability Evidence Contract v1 documents and explicit package query manifests. Evidence binds an exact package version to `direct`, `transitive`, or `unknown` dependency relationship and stores only bounded advisory identity, aliases, normalized severity, provider modification time, and known fixed versions. Advisory prose and raw provider payloads are intentionally excluded.
+
+Two collectors currently emit the same canonical evidence contract:
+
+* `bun run vulnerability:osv:collect` sends exact package/version queries to OSV's fixed batch endpoint. OSV is treated as unauthenticated public evidence.
+* `bun run vulnerability:github:collect` uses authenticated read-only `gh api --method GET` requests for open Dependabot alerts. Because Dependabot alerts do not establish the exact installed package version, collection requires the same explicit package/version manifest and fails closed when an open alert cannot be bound unambiguously.
+
+The audit is policy driven. `bun run audit:vulnerabilities` requires explicit blocking severities and dependency relationships, plus an explicit evaluation time. Optional evidence freshness limits and bounded vulnerability exceptions can be configured. Exceptions remain visible as warnings and can expire automatically.
+
+A known advisory never proves exploitability in the application. Reports therefore keep exploitability `UNKNOWN` unless a future separate evidence contract establishes runtime context. Likewise, absence of a patched version in provider evidence is reported as fix status `UNKNOWN`, not as a claim that no fix exists.
+```json
+{
+  "version": 1,
+  "evaluatedAt": "2026-09-16T14:35:00Z",
+  "maxEvidenceAgeSeconds": 86400,
+  "blockingSeverities": ["HIGH", "CRITICAL"],
+  "blockingRelationships": ["direct", "transitive"],
+  "exceptions": []
+}
+```
+
+```sh
+bun run vulnerability:evidence --manifest-file ./vulnerability-packages.json --json
+bun run vulnerability:osv:collect --manifest-file ./vulnerability-packages.json --json > osv-evidence.json
+bun run vulnerability:github:collect --repository owner/repo --manifest-file ./vulnerability-packages.json --json > github-evidence.json
+bun run audit:vulnerabilities --evidence-file ./osv-evidence.json --policy /private/path/vulnerability-policy.json
+```
+
+The canonical evidence validator and audit core are offline and read only. The OSV collector has one fixed HTTPS POST surface; the GitHub collector is limited to authenticated GET requests. Neither collector changes repositories, alerts, dependencies, or provider state.

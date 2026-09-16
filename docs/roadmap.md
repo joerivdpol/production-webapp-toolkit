@@ -57,7 +57,8 @@ Core principles:
 * API Contract Snapshot v1, provider-neutral compatibility comparator, and bounded OpenAPI JSON adapter: merged.
 * Cross-repository Contract Inventory v1 and explicit version/consensus policy audit: merged.
 * Dependency/runtime drift expansion with runtime policy and ecosystem version matrix: implementation complete on the active capability branch.
-* Vulnerability evidence and the remaining production-readiness capabilities remain open.
+* Provider-neutral vulnerability evidence, OSV and GitHub Dependabot collectors, and explicit vulnerability policy audit: implementation complete on the active capability branch.
+* SBOM generation and the remaining production-readiness capabilities remain open.
 
 10. Add CI evidence for the exact commit being evaluated, including tests, typecheck, lint, and build outcomes.
 11. Add read only GitHub branch protection and ruleset auditing.
