@@ -54,8 +54,9 @@ Core principles:
 * Database migration safety audit: merged.
 * Database Schema Snapshot v1, schema drift comparator, and read-only PostgreSQL observed catalog collector: merged.
 * PostgreSQL Security Snapshot v1, explicit security policy audit, and read-only catalog collector: merged.
-* API Contract Snapshot v1, provider-neutral compatibility comparator, and bounded OpenAPI JSON adapter: implementation complete on the active capability branch.
-* Cross-repository contracts and the remaining production-readiness capabilities remain open.
+* API Contract Snapshot v1, provider-neutral compatibility comparator, and bounded OpenAPI JSON adapter: merged.
+* Cross-repository Contract Inventory v1 and explicit version/consensus policy audit: implementation complete on the active capability branch.
+* The remaining production-readiness capabilities remain open.
 
 10. Add CI evidence for the exact commit being evaluated, including tests, typecheck, lint, and build outcomes.
 11. Add read only GitHub branch protection and ruleset auditing.

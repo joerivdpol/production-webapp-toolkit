@@ -51,7 +51,9 @@
     "audit:postgres-security": "node scripts/audit-postgres-security.js",
     "api:contract": "node scripts/api-contract-snapshot.js",
     "api:contract:openapi": "node scripts/openapi-api-contract.js",
-    "audit:api-contract": "node scripts/audit-api-contract.js"
+    "audit:api-contract": "node scripts/audit-api-contract.js",
+    "contract:inventory": "node scripts/contract-inventory.js",
+    "audit:cross-contracts": "node scripts/audit-cross-repository-contracts.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
