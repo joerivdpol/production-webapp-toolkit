@@ -75,7 +75,8 @@
     "orphan:evidence": "node scripts/orphan-evidence.js",
     "orphan:collect:static": "node scripts/collect-static-orphan-evidence.js",
     "audit:orphans": "node scripts/audit-orphans.js",
-    "audit:hygiene": "node scripts/audit-repository-hygiene.js"
+    "audit:hygiene": "node scripts/audit-repository-hygiene.js",
+    "audit:docs": "node scripts/audit-documentation-drift.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
