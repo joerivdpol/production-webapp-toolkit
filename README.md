@@ -1034,6 +1034,27 @@ bun run runtime:checkout:collect -- \
 
 The resulting JSON can be passed to the existing deployment and repository-status evidence flows. Deployment verification preserves the collector kind and identity scope, may still report the commit comparison itself as `MATCH`, but lowers overall readiness to `WARN` for checkout-scoped evidence because a matching checkout does not establish that an application, container, or process is actually running that commit.
 
+### Application-reported runtime evidence
+
+`bun run runtime:application:collect` collects an application's own build identity and emits canonical Runtime Evidence v1 with `collector.kind: application` and `identityScope: application-reported`. The application identity payload is deliberately small and versioned:
+
+```json
+{
+  "version": 1,
+  "runtime": { "name": "example-app", "environment": "production" },
+  "deployment": { "commit": "0123456789abcdef0123456789abcdef01234567" }
+}
+```
+
+The payload can come from a bounded regular local JSON file, which supports local sockets or supervisor bridges that materialize version data to disk, or from an explicit version endpoint. Endpoint collection is an unauthenticated GET with redirects disabled. Arbitrary HTTPS endpoints are accepted; plaintext HTTP is restricted to loopback hosts. URLs containing credentials, query strings, or fragments are rejected so this collector does not become a credential transport. Responses are bounded to 64 KiB and must contain valid JSON. The collector does not accept authorization headers, cookies, or mutation methods.
+
+```sh
+bun run runtime:application:collect -- --file /run/example/version.json --json
+bun run runtime:application:collect -- --url https://example.com/version --json
+```
+
+`authenticated` remains `false`: HTTPS transport or local file access does not prove that the application report is authentic. The `application-reported` scope is preserved by deployment verification and is reported as a scope claim rather than independent authentication proof.
+
 ```json
 {
   "version": 1,
