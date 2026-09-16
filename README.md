@@ -973,3 +973,39 @@ bun run audit:docs --root . --policy /private/path/documentation-drift-policy.js
 ```
 
 All inspected documents, manifests, contracts, generated sources, and referenced paths must stay inside the repository. Symlinks are not followed and text inspection is bounded to 2 MiB per file. The auditor performs no Git commands, network calls, environment reads, package installation, generator execution, file writes, or automatic documentation edits. Reports identify stale references and paths but never include document contents. Project-specific architecture prefixes, documentation scope, generated source bindings, and severities remain outside the public toolkit.
+
+### CODEOWNERS and critical path ownership audit
+
+`bun run audit:ownership` evaluates GitHub CODEOWNERS assignment for explicitly configured critical repository paths. Ownership Policy v1 can use GitHub's normal CODEOWNERS search order or name one of the three supported locations directly: `.github/CODEOWNERS`, repository root `CODEOWNERS`, or `docs/CODEOWNERS`. In automatic mode the first existing file in that order is authoritative, matching GitHub's documented precedence. CODEOWNERS files at or above 3 MiB, symbolic links, binary input, and non regular files fail inspection instead of producing a false ownership claim.
+
+The parser deliberately models GitHub's bounded CODEOWNERS syntax. Blank lines and comments are ignored. Patterns with negation, escaped leading `#`, or character ranges are reported as invalid because GitHub does not support those gitignore constructs. Each active line must name at least one syntactically valid `@user`, `@organization/team`, or email owner. Pattern matching is case sensitive and the last matching CODEOWNERS rule determines the owners for a tracked file.
+
+Critical path rules remain private or project specific policy. Each rule names path patterns, whether the selector must match tracked files, the minimum number of CODEOWNERS entries, and any owner tokens that must occur in the effective assignment. This lets a project require, for example, database or payment paths to have explicit engineering ownership without hardcoding those domains or owner identities into the public toolkit.
+
+```json
+{
+  "version": 1,
+  "codeownersFile": "auto",
+  "criticalRules": [
+    {
+      "id": "critical-backend",
+      "paths": ["src/critical/**"],
+      "requireMatches": true,
+      "minimumOwners": 2,
+      "requiredOwners": ["@example/backend", "@example/reviewers"]
+    }
+  ],
+  "severity": {
+    "fileInspection": "FAIL",
+    "syntax": "FAIL",
+    "criticalPath": "FAIL",
+    "requiredOwner": "FAIL"
+  }
+}
+```
+
+```sh
+bun run audit:ownership --root . --policy /private/path/ownership-policy.json
+```
+
+The audit uses local `git ls-files` only to enumerate tracked paths and never mutates Git or repository content. It does not authenticate whether a named GitHub user or team exists, is visible, or has write access, so owner access remains explicitly `UNVERIFIED`; provider-side access verification belongs in a separate authenticated collector. It also does not claim that CODEOWNERS review is enforced by branch protection. The existing GitHub protection audit remains the source for that separate policy dimension.
