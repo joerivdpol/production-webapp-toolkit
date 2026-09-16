@@ -22,16 +22,25 @@ function calleeName(expression) { if (ts.isIdentifier(expression)) return expres
 /** @param {string} root @param {string} relative */
 export function inspectTypeScriptCalls(root, relative) {
   const base = path.resolve(root), absolute = path.resolve(base, relative), rel = path.relative(base, absolute);
-  if (rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) return { ok: false, calls: new Set(), reason: "path-escape" };
-  let stat; try { stat = fs.lstatSync(absolute); } catch { return { ok: false, calls: new Set(), reason: "missing" }; }
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_FILE_BYTES) return { ok: false, calls: new Set(), reason: "uninspectable" };
-  const buffer = fs.readFileSync(absolute); if (buffer.includes(0)) return { ok: false, calls: new Set(), reason: "binary" };
+  /** @param {string} reason */ const failure = (reason) => ({ ok: false, calls: new Set(), orderedCalls: [], reason });
+  if (rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) return failure("path-escape");
+  let stat; try { stat = fs.lstatSync(absolute); } catch { return failure("missing"); }
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_FILE_BYTES) return failure("uninspectable");
+  const buffer = fs.readFileSync(absolute); if (buffer.includes(0)) return failure("binary");
   const source = ts.createSourceFile(relative, buffer.toString("utf8"), ts.ScriptTarget.Latest, true, scriptKind(relative));
   const diagnostics = /** @type {any} */ (source).parseDiagnostics ?? [];
-  if (diagnostics.length > 0) return { ok: false, calls: new Set(), reason: "parse-error" };
+  if (diagnostics.length > 0) return failure("parse-error");
   const calls = new Set();
+  /** @type {Array<{name:string,position:number}>} */ const orderedCalls = [];
   /** @param {any} node */
-  function visit(node) { if (ts.isCallExpression(node)) { const name = calleeName(node.expression); if (name) calls.add(name); } ts.forEachChild(node, visit); }
+  function visit(node) {
+    if (ts.isCallExpression(node)) {
+      const name = calleeName(node.expression);
+      if (name) { calls.add(name); orderedCalls.push({ name, position: node.getStart(source, false) }); }
+    }
+    ts.forEachChild(node, visit);
+  }
   visit(source);
-  return { ok: true, calls, reason: null };
+  orderedCalls.sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
+  return { ok: true, calls, orderedCalls, reason: null };
 }
