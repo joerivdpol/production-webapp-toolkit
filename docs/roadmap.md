@@ -44,8 +44,9 @@ Core principles:
 
 * CI Evidence Contract v1 and explicit CI verification: merged.
 * Repository CI status integration: merged.
-* Ecosystem CI status integration: implementation in progress.
-* Provider collection, GitHub protection auditing, and the remaining production-readiness capabilities remain open.
+* Ecosystem CI status integration: merged.
+* GitHub Actions CI Evidence adapter: implementation in progress.
+* Online provider collection, GitHub protection auditing, and the remaining production-readiness capabilities remain open.
 
 10. Add CI evidence for the exact commit being evaluated, including tests, typecheck, lint, and build outcomes.
 11. Add read only GitHub branch protection and ruleset auditing.
