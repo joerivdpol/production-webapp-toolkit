@@ -55,7 +55,8 @@ Core principles:
 * Database Schema Snapshot v1, schema drift comparator, and read-only PostgreSQL observed catalog collector: merged.
 * PostgreSQL Security Snapshot v1, explicit security policy audit, and read-only catalog collector: merged.
 * API Contract Snapshot v1, provider-neutral compatibility comparator, and bounded OpenAPI JSON adapter: merged.
-* Cross-repository Contract Inventory v1 and explicit version/consensus policy audit: implementation complete on the active capability branch.
+* Cross-repository Contract Inventory v1 and explicit version/consensus policy audit: merged.
+* Dependency/runtime drift expansion with framework/client ecosystem view, major-version conflicts, and explicit runtime support policy: implementation complete on the active capability branch.
 * The remaining production-readiness capabilities remain open.
 
 10. Add CI evidence for the exact commit being evaluated, including tests, typecheck, lint, and build outcomes.

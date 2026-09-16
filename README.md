@@ -533,7 +533,7 @@ MIT
 
 Production Webapp Toolkit v1.1 supports repository profiles and profiled auditing for TypeScript webapps and Python services, plus explicit Git governance, production baselines, runtime evidence, deployment verification, repository status, and ecosystem status.
 
-It provides dependency drift auditing across repositories, including version differences and reproducibility gaps.
+It provides dependency drift auditing across repositories, including version differences and reproducibility gaps. The expanded audit also compares explicit Node.js and Python runtime references, package-manager pins, Node engine declarations, framework/client-library versions, and major-version conflicts. An optional version 1 runtime policy can explicitly declare supported Node.js and package-manager majors without hardcoding organization-specific support policy into the toolkit.
 
 It provides public repository safety checks for tracked sensitive files and secret-like content. The toolkit runs this check as a blocking CI gate and does not print detected secret values.
 
@@ -555,6 +555,32 @@ Useful commands:
 - bun run audit:release .
 - bun run audit:release . --expected-version 1.1.0
 - bun run release:verify
+
+### Dependency and runtime drift audit
+
+`bun run audit:drift` produces an ecosystem view across explicit repository paths. It tracks common frontend frameworks plus TypeScript, Playwright, TanStack and Supabase client versions, reports exact dependency-spec drift separately from cross-major conflicts, and compares `.node-version`, `.python-version`, `packageManager`, and `engines.node` evidence when present. Missing or unpinned reproducibility evidence remains visible instead of being silently filled in.
+
+Runtime support is policy driven. A private policy may declare supported Node.js majors, allowed package-manager majors, and whether an exact `.node-version`, exact `packageManager` pin, or `engines.node` declaration is required. Unsupported runtime evidence is blocking only when an explicit policy establishes that support boundary. Missing evidence is reported as unverified unless the policy explicitly requires it.
+
+```json
+{
+  "version": 1,
+  "supportedNodeMajors": [24],
+  "packageManagers": [
+    { "name": "bun", "supportedMajors": [1] }
+  ],
+  "requireNodeVersionFile": true,
+  "requirePackageManagerPin": true,
+  "requireNodeEngine": true
+}
+```
+
+```sh
+bun run audit:drift /path/to/hills /path/to/travel /path/to/pulse
+bun run audit:drift /path/to/hills /path/to/travel --policy /private/path/runtime-policy.json --json
+```
+
+The audit is local and read only. It does not query package registries, infer what an organization supports, or decide that one repository's version is canonical.
 
 ### PostgreSQL security policy audit
 
