@@ -78,7 +78,7 @@ function isCalendarDate(value) {
 }
 
 /** @param {string} value */
-function isAbsoluteIsoTimestamp(value) {
+export function isAbsoluteIsoTimestamp(value) {
   const match = ISO_TIMESTAMP_PATTERN.exec(value);
   if (!match) return false;
   const [, year, month, day, hour, minute, second, timezone] = match;

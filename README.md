@@ -55,17 +55,22 @@ Deployment verification answers one narrow question: whether an explicitly suppl
 ```sh
 bun run audit:deployment /path/to/repository --expected-ref origin/production/example --deployed-commit 0123456789abcdef0123456789abcdef01234567
 bun run audit:deployment /path/to/repository --expected-ref origin/production/example --evidence-file ./runtime-evidence.json
+bun run audit:deployment /path/to/repository --expected-ref origin/production/example --evidence-file ./runtime-evidence.json --max-evidence-age-seconds 3600 --evaluated-at 2026-09-16T12:00:00Z
 ```
 
 `--deployed-commit` accepts only a full 40-character SHA-1 or 64-character SHA-256 object ID; abbreviated IDs, `HEAD`, refs, branches, and revision expressions are rejected. Hex case is normalized for comparison. `--evidence-file` reads only that explicit JSON file, parses it, and validates and normalizes it through Runtime Evidence Contract v1 before using its `deployment.commit`. The two inputs are mutually exclusive; absent input, both inputs, unknown options, or a missing value are CLI failures (exit 1). Missing or unreadable files, malformed JSON, and schema-invalid evidence files are also input failures (exit 1), with no fallback to a ref, branch, baseline, `HEAD`, or other commit source.
 
 Direct commits remain represented as `evidence.type: "explicit-commit"`, `source: "caller-supplied"`, and `authenticated: false`. Evidence-file reports instead use `evidence.type: "runtime-evidence"` and retain the validated `source`, `authenticated`, `collectedAt`, and `runtime` (`name` and optional `environment`) fields. These are compact trust metadata only: `runtime.environment` and `source` get no inferred meaning, and `authenticated: true` never turns a mismatch into a match or a warning into a pass. Schema validity is not runtime authenticity; it only proves that the supplied document satisfies the contract.
 
+Runtime Evidence can optionally be evaluated against an explicit freshness policy with `--max-evidence-age-seconds <seconds>` and `--evaluated-at <absolute-iso-timestamp>`. Both options are required together and are valid only with `--evidence-file`. The evaluator never reads the system clock and never generates an evaluation time. Age is calculated deterministically as `evaluatedAt - collectedAt`; an age equal to the maximum remains `FRESH`, an older observation is `STALE`, and evidence collected after the explicit evaluation time is `FUTURE`. Without a policy, runtime evidence reports freshness as `NOT_CONFIGURED`; direct commit evidence reports `NOT_APPLICABLE`.
+
+Freshness is independent from commit identity. A stale or future-dated observation can still have `deploymentStatus: "MATCH"`, because its commit matches the baseline, but its overall readiness becomes `WARN`. `FRESH` evidence does not add authenticity: it only establishes recency relative to the caller-supplied policy and evaluation time.
+
 This auditor does not collect or cryptographically authenticate runtime evidence. It makes no SSH, system, container, HTTP, Git-host, or remote-runtime request, and never reads runtime state or private configuration. Apart from its existing local, read-only production-baseline inspection, evidence mode reads only the requested evidence file; it does not modify that input or generate timestamps.
 
 For direct in-process callers, an absent or invalid deployed value is reported as `deploymentStatus: "UNVERIFIED"` with an evidence warning; it is never treated as a proven mismatch. Caller-supplied runtime-evidence metadata is ignored by that public API, so only the evidence-file flow can establish the validated runtime-evidence report variant. The CLI continues to reject invalid deployed values during argument validation.
 
-`deploymentStatus` is `MATCH` when that evidence equals a reliably locally resolved baseline, `MISMATCH` when it reliably differs, and `UNVERIFIED` when the baseline cannot be established locally or the supplied ref-and-commit contract is inconsistent. Runtime evidence never selects the production baseline: only `--expected-ref` and/or `--expected-commit` do that. It does not select a branch from `production/*`, `main`, a remote default, or governance candidates. `technicalStatus` is independent: a baseline-inspection failure is `FAIL`; otherwise it is `PASS`. `MATCH` produces overall `PASS`; `MISMATCH` and `UNVERIFIED` produce overall `WARN` and exit 0; technical `FAIL` produces overall `FAIL` and exit 1. No deployment genealogy or production truth is inferred.
+`deploymentStatus` is `MATCH` when that evidence equals a reliably locally resolved baseline, `MISMATCH` when it reliably differs, and `UNVERIFIED` when the baseline cannot be established locally or the supplied ref-and-commit contract is inconsistent. Runtime evidence never selects the production baseline: only `--expected-ref` and/or `--expected-commit` do that. It does not select a branch from `production/*`, `main`, a remote default, or governance candidates. `technicalStatus` is independent: a baseline-inspection failure is `FAIL`; otherwise it is `PASS`. A `MATCH` produces overall `PASS` unless a configured freshness policy reports `STALE` or `FUTURE`, which produces overall `WARN` while preserving the match. `MISMATCH` and `UNVERIFIED` also produce overall `WARN` and exit 0; technical `FAIL` produces overall `FAIL` and exit 1. No deployment genealogy or production truth is inferred.
 
 Use `--json` for the stable machine-readable report:
 
@@ -137,15 +142,17 @@ Or use a Runtime Evidence Contract v1 file:
 ```sh
 bun run audit:repository-status /path/to/repository \
   --expected-ref origin/production/example \
-  --evidence-file ./runtime-evidence.json
+  --evidence-file ./runtime-evidence.json \
+  --max-evidence-age-seconds 3600 \
+  --evaluated-at 2026-09-16T12:00:00Z
 ```
 `--deployed-commit` and `--evidence-file` are mutually exclusive. Deployment evidence without an explicit baseline is rejected. Direct commits use the canonical full-object-ID validator; evidence files use the canonical Runtime Evidence Contract validator and deployment comparison adapter. Missing, unreadable, malformed, or schema-invalid evidence files are CLI input failures with exit 1 and never fall back to another commit source.
 
-The deployment dimension retains canonical trust metadata in JSON, including `deployedCommit`, `deploymentStatus`, `technicalStatus`, `evidence.type`, `source`, `authenticated`, and, for runtime evidence, `collectedAt` plus runtime name and optional environment. `authenticated: true` remains metadata and does not alter deployment status.
+The deployment dimension retains canonical trust metadata in JSON, including `deployedCommit`, `deploymentStatus`, `technicalStatus`, `evidence.type`, `source`, `authenticated`, and, for runtime evidence, `collectedAt` plus runtime name and optional environment. It also preserves the canonical `freshness` report. A configured freshness policy is accepted only with `evidenceFile`; stale or future evidence renders the deployment dimension as `WARN` while preserving `deploymentStatus: "MATCH"`. `authenticated: true` remains metadata and does not alter deployment status.
 
 The top-level JSON keeps the existing `root`, `profile`, `baselineConfigured`, `dimensions`, `technicalStatus`, `overallStatus`, and `summary` fields and adds `deploymentConfigured` plus `dimensions.deployment` and `summary.deployment`.
 
-`WARN` is not a technical failure. Governance warnings, an unconfigured baseline, an unconfigured deployment, baseline `MISMATCH` or `UNVERIFIED`, and deployment `MISMATCH` or `UNVERIFIED` exit 0. Quality failure or a technical audit failure produces overall `FAIL` and exit 1. Runtime evidence never selects the production baseline; only explicit baseline selectors do that.
+`WARN` is not a technical failure. Governance warnings, an unconfigured baseline, an unconfigured deployment, baseline `MISMATCH` or `UNVERIFIED`, deployment `MISMATCH` or `UNVERIFIED`, and configured freshness states `STALE` or `FUTURE` exit 0. Quality failure or a technical audit failure produces overall `FAIL` and exit 1. Runtime evidence never selects the production baseline; only explicit baseline selectors do that.
 
 The repository-status layer adds no network access, runtime probing, target-repository writes, Git mutation, or production inference. Evidence-file mode reads only the requested evidence document through the deployment-verification adapter.
 
@@ -178,7 +185,9 @@ Use `--config` for explicit, per-repository baseline selectors. Positional paths
       "name": "worker-b",
       "path": "/path/to/worker-b",
       "expectedRef": "origin/production",
-      "evidenceFile": "./evidence/worker-b.json"
+      "evidenceFile": "./evidence/worker-b.json",
+      "maxEvidenceAgeSeconds": 3600,
+      "evaluatedAt": "2026-09-16T12:00:00Z"
     },
     {
       "path": "/path/to/app-c"
@@ -187,14 +196,14 @@ Use `--config` for explicit, per-repository baseline selectors. Positional paths
 }
 ```
 
-`name` is display metadata only. A repository with no `expectedRef` or `expectedCommit` remains `BASELINE NOT_CONFIGURED`; `compareRef` requires one of those selectors. `deployedCommit` and `evidenceFile` require a baseline and cannot be supplied together. Direct deployment commits reuse the canonical full-object-ID validator. Evidence files are resolved relative to the ecosystem config file and are validated through repository status and the canonical Runtime Evidence Contract adapter. Duplicate resolved target paths are rejected, preventing duplicate counts.
+`name` is display metadata only. A repository with no `expectedRef` or `expectedCommit` remains `BASELINE NOT_CONFIGURED`; `compareRef` requires one of those selectors. `deployedCommit` and `evidenceFile` require a baseline and cannot be supplied together. Direct deployment commits reuse the canonical full-object-ID validator. Evidence files are resolved relative to the ecosystem config file and are validated through repository status and the canonical Runtime Evidence Contract adapter. `maxEvidenceAgeSeconds` and `evaluatedAt` are an optional pair, valid only with `evidenceFile`, and reuse the canonical freshness policy validator. Duplicate resolved target paths are rejected, preventing duplicate counts.
 
 ```sh
 bun run audit:ecosystem-status --config /private/path/ecosystem-status.json
 bun run audit:ecosystem-status --config /private/path/ecosystem-status.json --json
 ```
 
-The stable JSON report contains `inputMode`, optional `configVersion`, ordered `repositories`, machine-readable `summary`, `technicalStatus`, and `overallStatus`; it never prints config-file contents or the config path. The summary now counts deployment `pass`, `warn`, `fail`, and `notConfigured` states alongside the existing dimensions, and the human scorecard includes a `DEPLOYMENT` column. Overall status is `FAIL` when any repository fails, otherwise `WARN` when any repository warns, otherwise `PASS`. Technical status fails only when at least one repository has a technical failure. `FAIL` exits 1; `PASS` and `WARN` exit 0. A failed or missing target, unreadable evidence file, malformed evidence document, or schema-invalid runtime evidence is isolated to that repository so the remaining repositories are still inspected.
+The stable JSON report contains `inputMode`, optional `configVersion`, ordered `repositories`, machine-readable `summary`, `technicalStatus`, and `overallStatus`; it never prints config-file contents or the config path. The summary counts deployment `pass`, `warn`, `fail`, and `notConfigured` states alongside the existing dimensions, and the human scorecard includes a `DEPLOYMENT` column. When freshness is configured, that column distinguishes values such as `MATCH/FRESH` and `MATCH/STALE`. Overall status is `FAIL` when any repository fails, otherwise `WARN` when any repository warns, otherwise `PASS`. Technical status fails only when at least one repository has a technical failure. `FAIL` exits 1; `PASS` and `WARN` exit 0. A failed or missing target, unreadable evidence file, malformed evidence document, or schema-invalid runtime evidence is isolated to that repository so the remaining repositories are still inspected.
 
 The command is read only and offline. The ecosystem layer only reads an explicitly supplied JSON config and calls the in-process repository-status inspector; it runs no Git command itself and performs no fetch, network request, checkout, or target-repository write.
 

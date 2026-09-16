@@ -10,9 +10,10 @@ import {
   inspectDeploymentVerification,
   inspectDeploymentVerificationFromEvidenceFile,
   isFullObjectId,
+  validateEvidenceFreshnessPolicy,
 } from "./audit-deployment-verification.js";
 
-/** @typedef {{ expectedRef?: string | null, expectedCommit?: string | null, compareRef?: string | null, deployedCommit?: string | null, evidenceFile?: string | null }} StatusOptions */
+/** @typedef {{ expectedRef?: string | null, expectedCommit?: string | null, compareRef?: string | null, deployedCommit?: string | null, evidenceFile?: string | null, maxEvidenceAgeSeconds?: number | null, evaluatedAt?: string | null }} StatusOptions */
 
 /** @param {unknown} error */
 function errorDetail(error) {
@@ -162,6 +163,7 @@ function deploymentDimension(report) {
     expectedResolvedCommit: report.expectedResolvedCommit,
     deployedCommit: report.deployedCommit,
     evidence: report.evidence,
+    freshness: report.freshness,
     checks: report.checks,
   };
 }
@@ -179,6 +181,7 @@ function notConfiguredDeployment() {
     expectedResolvedCommit: null,
     deployedCommit: null,
     evidence: null,
+    freshness: null,
     checks: [],
   };
 }
@@ -190,6 +193,8 @@ function inspectDeployment(target, options) {
       expectedRef: options.expectedRef ?? null,
       expectedCommit: options.expectedCommit ?? null,
       evidenceFile: options.evidenceFile,
+      maxEvidenceAgeSeconds: options.maxEvidenceAgeSeconds ?? null,
+      evaluatedAt: options.evaluatedAt ?? null,
     });
     if (!result.ok) {
       const error = new Error(result.error.detail);
@@ -228,6 +233,14 @@ export function inspectRepositoryStatus(target, options = {}) {
   }
   if (deploymentConfigured && !baselineConfigured) {
     throw new Error("deployment evidence requires an explicit production baseline");
+  }
+  const freshnessPolicy = validateEvidenceFreshnessPolicy(
+    options.maxEvidenceAgeSeconds ?? null,
+    options.evaluatedAt ?? null,
+  );
+  if (!freshnessPolicy.ok) throw new Error(freshnessPolicy.error.detail);
+  if (freshnessPolicy.policy !== null && !options.evidenceFile) {
+    throw new Error("freshness policy requires Runtime Evidence file input");
   }
 
   const baseline = baselineConfigured
@@ -282,8 +295,11 @@ export function formatRepositoryStatus(report) {
   const baselineLabel = baseline.configured
     ? `${baseline.status} (${baseline.baselineStatus})`
     : baseline.status;
+  const freshnessLabel = deployment.freshness?.configured
+    ? `; ${deployment.freshness.status}`
+    : "";
   const deploymentLabel = deployment.configured
-    ? `${deployment.status} (${deployment.deploymentStatus})`
+    ? `${deployment.status} (${deployment.deploymentStatus}${freshnessLabel})`
     : deployment.status;
 
   return [
@@ -299,7 +315,7 @@ export function formatRepositoryStatus(report) {
   ].join("\n");
 }
 
-/** @typedef {{ expectedRef: string | null, expectedCommit: string | null, compareRef: string | null, deployedCommit: string | null, evidenceFile: string | null, json: boolean, target: string | null }} CliArguments */
+/** @typedef {{ expectedRef: string | null, expectedCommit: string | null, compareRef: string | null, deployedCommit: string | null, evidenceFile: string | null, maxEvidenceAgeSeconds: number | null, evaluatedAt: string | null, json: boolean, target: string | null }} CliArguments */
 /** @param {string[]} argv @returns {CliArguments | null} */
 export function parseArguments(argv) {
   /** @type {CliArguments} */
@@ -309,6 +325,8 @@ export function parseArguments(argv) {
     compareRef: null,
     deployedCommit: null,
     evidenceFile: null,
+    maxEvidenceAgeSeconds: null,
+    evaluatedAt: null,
     json: false,
     target: null,
   };
@@ -324,7 +342,9 @@ export function parseArguments(argv) {
       argument === "--expected-commit" ||
       argument === "--compare-ref" ||
       argument === "--deployed-commit" ||
-      argument === "--evidence-file"
+      argument === "--evidence-file" ||
+      argument === "--max-evidence-age-seconds" ||
+      argument === "--evaluated-at"
     ) {
       const value = argv[index + 1];
       if (typeof value !== "string" || !value || value.startsWith("--")) return null;
@@ -334,6 +354,13 @@ export function parseArguments(argv) {
       if (argument === "--compare-ref") options.compareRef = value;
       if (argument === "--deployed-commit") options.deployedCommit = value;
       if (argument === "--evidence-file") options.evidenceFile = value;
+      if (argument === "--max-evidence-age-seconds") {
+        if (!/^[1-9]\d*$/.test(value)) return null;
+        const maxEvidenceAgeSeconds = Number(value);
+        if (!Number.isSafeInteger(maxEvidenceAgeSeconds)) return null;
+        options.maxEvidenceAgeSeconds = maxEvidenceAgeSeconds;
+      }
+      if (argument === "--evaluated-at") options.evaluatedAt = value;
       index += 1;
     } else if (argument.startsWith("-")) {
       return null;
@@ -350,6 +377,12 @@ export function parseArguments(argv) {
   if (deploymentConfigured && !baselineConfigured) return null;
   if (options.deployedCommit !== null && options.evidenceFile !== null) return null;
   if (options.deployedCommit !== null && !isFullObjectId(options.deployedCommit)) return null;
+  const freshnessPolicy = validateEvidenceFreshnessPolicy(
+    options.maxEvidenceAgeSeconds,
+    options.evaluatedAt,
+  );
+  if (!freshnessPolicy.ok) return null;
+  if (freshnessPolicy.policy !== null && options.evidenceFile === null) return null;
   return options;
 }
 
@@ -357,7 +390,7 @@ export function main(argv = process.argv.slice(2)) {
   const options = parseArguments(argv);
   if (!options) {
     console.error(
-      "Usage: node scripts/audit-repository-status.js [repository] [--expected-ref <git-ref> | --expected-commit <commit>] [--compare-ref <git-ref>] [--deployed-commit <40-or-64-hex-object-id> | --evidence-file <runtime-evidence.json>] [--json]",
+      "Usage: node scripts/audit-repository-status.js [repository] [--expected-ref <git-ref> | --expected-commit <commit>] [--compare-ref <git-ref>] [--deployed-commit <40-or-64-hex-object-id> | --evidence-file <runtime-evidence.json> [--max-evidence-age-seconds <seconds> --evaluated-at <absolute-iso-timestamp>]] [--json]",
     );
     return 1;
   }

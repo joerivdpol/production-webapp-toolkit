@@ -32,8 +32,9 @@ Core principles:
 ### Current v1.1 progress
 
 * Repository status deployment dimension: merged.
-* Ecosystem status deployment dimension: implemented; awaiting merge.
-* Evidence freshness, runtime identity binding, reproducible release checks, and v1.1.0 release remain open.
+* Ecosystem status deployment dimension: merged.
+* Evidence freshness: implemented; awaiting merge.
+* Runtime identity binding, reproducible release checks, and v1.1.0 release remain open.
 
 ## v1.2 Production readiness
 

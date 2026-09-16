@@ -8,6 +8,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import {
   formatDeploymentVerification,
   inspectDeploymentVerification,
+  inspectDeploymentVerificationFromEvidenceFile,
   main,
 } from "../scripts/audit-deployment-verification.js";
 
@@ -399,6 +400,147 @@ test("evidence-file CLI mode is exclusive, stable, clear, and does not change in
   assert.equal(fs.readFileSync(filename, "utf8"), original);
 });
 
+test("direct commits do not pretend to have freshness evidence", () => {
+  const { root, initial } = createRepository();
+  const report = inspectDeploymentVerification(root, {
+    expectedRef: "main",
+    deployedCommit: initial,
+  });
+
+  assert.equal(report.deploymentStatus, "MATCH");
+  assert.equal(report.freshness.configured, false);
+  assert.equal(report.freshness.status, "NOT_APPLICABLE");
+  assert.equal(report.overallStatus, "PASS");
+});
+
+test("runtime evidence without a freshness policy remains backwards compatible", () => {
+  const { root, initial } = createRepository();
+  const filename = writeEvidenceFile(root, validRuntimeEvidence(initial));
+  const result = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: filename,
+  });
+  if (!result.ok) assert.fail(result.error.detail);
+  assert.equal(result.report.deploymentStatus, "MATCH");
+  assert.equal(result.report.freshness.configured, false);
+  assert.equal(result.report.freshness.status, "NOT_CONFIGURED");
+  assert.equal(result.report.freshness.collectedAt, "2026-09-01T12:00:00Z");
+  assert.equal(result.report.overallStatus, "PASS");
+});
+test("fresh runtime evidence preserves PASS at the inclusive age boundary", () => {
+  const { root, initial } = createRepository();
+  const filename = writeEvidenceFile(root, validRuntimeEvidence(initial));
+  const result = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: filename,
+    maxEvidenceAgeSeconds: 3600,
+    evaluatedAt: "2026-09-01T13:00:00Z",
+  });
+  if (!result.ok) assert.fail(result.error.detail);
+  assert.equal(result.report.deploymentStatus, "MATCH");
+  assert.equal(result.report.freshness.status, "FRESH");
+  assert.equal(result.report.freshness.ageSeconds, 3600);
+  assert.equal(result.report.freshness.maxAgeSeconds, 3600);
+  assert.equal(result.report.overallStatus, "PASS");
+  assert.equal(result.report.checks.find((check) => check.id === "evidence-freshness")?.severity, "PASS");
+});
+
+test("stale runtime evidence keeps MATCH but lowers overall status to WARN", () => {
+  const { root, initial } = createRepository();
+  const filename = writeEvidenceFile(root, validRuntimeEvidence(initial));
+  const result = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: filename,
+    maxEvidenceAgeSeconds: 3600,
+    evaluatedAt: "2026-09-01T14:00:00Z",
+  });
+  if (!result.ok) assert.fail(result.error.detail);
+  assert.equal(result.report.deploymentStatus, "MATCH");
+  assert.equal(result.report.freshness.status, "STALE");
+  assert.equal(result.report.freshness.ageSeconds, 7200);
+  assert.equal(result.report.technicalStatus, "PASS");
+  assert.equal(result.report.overallStatus, "WARN");
+  assert.equal(result.report.checks.find((check) => check.id === "evidence-freshness")?.severity, "WARN");
+});
+test("future-dated runtime evidence is a warning without changing deployment MATCH", () => {
+  const { root, initial } = createRepository();
+  const filename = writeEvidenceFile(root, validRuntimeEvidence(initial));
+  const result = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: filename,
+    maxEvidenceAgeSeconds: 3600,
+    evaluatedAt: "2026-09-01T11:00:00Z",
+  });
+  if (!result.ok) assert.fail(result.error.detail);
+  assert.equal(result.report.deploymentStatus, "MATCH");
+  assert.equal(result.report.freshness.status, "FUTURE");
+  assert.equal(result.report.freshness.ageSeconds, -3600);
+  assert.equal(result.report.technicalStatus, "PASS");
+  assert.equal(result.report.overallStatus, "WARN");
+});
+
+test("freshness uses canonical absolute timestamps across timezone offsets", () => {
+  const { root, initial } = createRepository();
+  const evidence = validRuntimeEvidence(initial);
+  evidence.evidence.collectedAt = "2026-09-01T19:00:00+07:00";
+  const result = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: writeEvidenceFile(root, evidence),
+    maxEvidenceAgeSeconds: 1800,
+    evaluatedAt: "2026-09-01T12:30:00Z",
+  });
+  if (!result.ok) assert.fail(result.error.detail);
+  assert.equal(result.report.freshness.status, "FRESH");
+  assert.equal(result.report.freshness.ageSeconds, 1800);
+});
+test("freshness policy CLI is explicit, complete, and evidence-file only", () => {
+  const { root, initial } = createRepository();
+  const filename = writeEvidenceFile(root, validRuntimeEvidence(initial));
+  const invalidInvocations = [
+    [root, "--expected-ref", "main", "--evidence-file", filename, "--max-evidence-age-seconds", "3600"],
+    [root, "--expected-ref", "main", "--evidence-file", filename, "--evaluated-at", "2026-09-01T13:00:00Z"],
+    [root, "--expected-ref", "main", "--deployed-commit", initial, "--max-evidence-age-seconds", "3600", "--evaluated-at", "2026-09-01T13:00:00Z"],
+    [root, "--expected-ref", "main", "--evidence-file", filename, "--max-evidence-age-seconds", "0", "--evaluated-at", "2026-09-01T13:00:00Z"],
+    [root, "--expected-ref", "main", "--evidence-file", filename, "--max-evidence-age-seconds", "1.5", "--evaluated-at", "2026-09-01T13:00:00Z"],
+    [root, "--expected-ref", "main", "--evidence-file", filename, "--max-evidence-age-seconds", "3600", "--evaluated-at", "2026-09-01T13:00:00"],
+  ];
+  for (const args of invalidInvocations) {
+    assert.equal(runCli(...args).status, 1, `expected CLI failure for ${args.join(" ")}`);
+  }
+
+  const valid = runCli(
+    root,
+    "--expected-ref", "main",
+    "--evidence-file", filename,
+    "--max-evidence-age-seconds", "3600",
+    "--evaluated-at", "2026-09-01T13:00:00Z",
+    "--json",
+  );
+  assert.equal(valid.status, 0);
+  const report = JSON.parse(valid.stdout);
+  assert.equal(report.freshness.status, "FRESH");
+});
+
+test("programmatic freshness policy failures remain input errors", () => {
+  const { root, initial } = createRepository();
+  const filename = writeEvidenceFile(root, validRuntimeEvidence(initial));
+  const incomplete = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: filename,
+    maxEvidenceAgeSeconds: 3600,
+  });
+  const invalidAge = inspectDeploymentVerificationFromEvidenceFile(root, {
+    expectedRef: "main",
+    evidenceFile: filename,
+    maxEvidenceAgeSeconds: -1,
+    evaluatedAt: "2026-09-01T13:00:00Z",
+  });
+  assert.equal(incomplete.ok, false);
+  assert.equal(invalidAge.ok, false);
+  if (!incomplete.ok) assert.equal(incomplete.error.id, "freshness-policy-incomplete");
+  if (!invalidAge.ok) assert.equal(invalidAge.error.id, "freshness-max-age-invalid");
+});
+
 test("keeps invalid in-process deployed evidence unverified", () => {
   const invalidValues = ["HEAD", "abc123", "HEAD~1"];
 
@@ -512,7 +654,7 @@ test("JSON and human output expose the stable deployment and trust contract", ()
   const human = formatDeploymentVerification(
     inspectDeploymentVerification(root, { expectedRef: "main", deployedCommit: initial }),
   );
-  for (const label of ["Expected baseline", "Deployed commit", "Deployment status", "Technical", "Overall"]) {
+  for (const label of ["Expected baseline", "Deployed commit", "Evidence freshness", "Deployment status", "Technical", "Overall"]) {
     assert.match(human, new RegExp(label));
   }
 });
@@ -521,9 +663,9 @@ test("the deployment layer reuses the canonical validator and adds no runtime or
   const source = fs.readFileSync(path.resolve("scripts/audit-deployment-verification.js"), "utf8");
 
   assert.match(source, /inspectProductionBaseline/);
-  assert.match(source, /import \{ validateRuntimeEvidence \} from "\.\/runtime-evidence\.js"/);
+  assert.match(source, /import \{ isAbsoluteIsoTimestamp, validateRuntimeEvidence \} from "\.\/runtime-evidence\.js"/);
   assert.match(source, /validateRuntimeEvidence\(input\)/);
-  for (const forbidden of ["child_process", "spawnSync", "execFile", "readGit", "fetch", "process.env", "https://", "http://"]) {
+  for (const forbidden of ["child_process", "spawnSync", "execFile", "readGit", "fetch", "process.env", "Date.now", "https://", "http://"]) {
     assert.equal(source.includes(forbidden), false, `forbidden ${forbidden} surface`);
   }
 });
