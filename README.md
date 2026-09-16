@@ -253,6 +253,27 @@ Example files are accepted only when their path clearly identifies them as `exam
 
 The audit is local and read only. It performs no repository writes, Git commands, network requests, shell commands, secret manager access, or environment reads. `PASS` and `WARN` exit 0; contract violations, invalid contract input, or technical inspection failures exit 1.
 
+### Client environment exposure audit
+
+`bun run audit:env-exposure` builds on the canonical Environment Contract scanner to detect client-visible server configuration and unsafe public environment naming without reading any environment values. It requires the same explicit Environment Contract v1 file and may optionally accept narrowly scoped public-name exceptions:
+
+```sh
+bun run audit:env-exposure /path/to/repository \
+  --contract /path/to/environment-contract.json
+
+bun run audit:env-exposure /path/to/repository \
+  --contract /path/to/environment-contract.json \
+  --allow-public-name VITE_PUBLIC_TOKEN
+```
+
+A contract variable declared `server` fails when source code reaches it through a public accessor. Public names are also checked for strong secret-like components such as `SECRET`, `PASSWORD`, `TOKEN`, `CREDENTIAL`, `PRIVATE`, `API_KEY`, `ACCESS_KEY`, `ADMIN_KEY`, `MASTER_KEY`, `ROOT_KEY`, `SERVICE_ROLE_KEY`, and `SIGNING_KEY`. The check is deliberately component-based rather than substring-based so names such as `VITE_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `VITE_TOKENIZER_VERSION`, `VITE_SECRETARY_NOTE`, and `VITE_PASSWORDLESS_MODE` do not become false positives.
+
+An explicit `--allow-public-name` suppresses only the secret-like naming heuristic for a variable already declared `public` in the contract. It cannot make an undeclared or `server` variable public and duplicate or unknown exceptions are rejected. Public contract names without a recognized framework prefix such as `VITE_`, `NEXT_PUBLIC_`, `REACT_APP_`, `PUBLIC_`, `EXPO_PUBLIC_`, `GATSBY_`, or `NUXT_PUBLIC_` are a readiness warning rather than an automatic exposure failure.
+
+Undeclared public references are warnings when their names are otherwise non-secret-like and failures when they are secret-like. Dynamic computed access remains `WARN` because the auditor does not invent a variable identity. The audit reuses the exact Environment Contract source scanner, so accessor classification, symlink handling, scan bounds, and path safety have one canonical implementation.
+
+The audit is local and read only. It never reads runtime `.env` files, process environment values, example values, network resources, Git metadata, or secret stores and never writes to the inspected repository. `PASS` and `WARN` exit 0; detected unsafe exposure, invalid inputs, or technical inspection failure exits 1.
+
 ## Repository status
 
 `bun run audit:repository-status /path/to/repository` combines the existing profiled quality, offline Git-governance, optional production-baseline, optional deployment-verification, and optional CI-verification audits into one read-only scorecard. It composes their canonical results rather than reimplementing their rules or inferring production truth.
