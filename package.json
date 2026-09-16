@@ -71,7 +71,10 @@
     "test:select": "node scripts/select-tests.js",
     "audit:flaky-tests": "node scripts/audit-flaky-tests.js",
     "coverage:evidence": "node scripts/coverage-comparison-evidence.js",
-    "audit:coverage": "node scripts/audit-coverage-regression.js"
+    "audit:coverage": "node scripts/audit-coverage-regression.js",
+    "orphan:evidence": "node scripts/orphan-evidence.js",
+    "orphan:collect:static": "node scripts/collect-static-orphan-evidence.js",
+    "audit:orphans": "node scripts/audit-orphans.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",

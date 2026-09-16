@@ -864,3 +864,35 @@ bun run audit:coverage \
 ```
 
 The evidence validator and audit core are offline and read only. They do not run tests, invoke Git, parse test logs, infer changed files, or claim that caller supplied coverage belongs to a commit merely because the commit id is present. A future collector can bind specific coverage providers to this contract without changing the comparison semantics. Organization-specific path patterns and thresholds remain outside the public toolkit.
+
+### Dead code and orphan detection
+
+`bun run orphan:collect:static` produces Orphan Evidence v1 from an explicit Static Orphan Policy v1. The public collector supports two bounded analysis modes. TypeScript symbol scanners inventory module exports or handler exports from configured source paths and record total plus external reference evidence. JSON catalog scanners inventory routes, feature flags, or translation keys and count exact string-literal use at explicitly configured call sites such as `router.get`, `isEnabled`, or `t`.
+
+Catalog collection supports top-level or flattened JSON keys and top-level or flattened string values. This lets a project use translation or feature-flag keys as identifiers, or use explicit route-path values as route identifiers, without hardcoding any application vocabulary in the toolkit. Scanner ids, source globs, catalog locations, call names, and argument positions all come from project or private organization policy. Public API surfaces can be excluded explicitly from a symbol scanner rather than being guessed from directory names.
+
+`bun run audit:orphans` applies Orphan Policy v1 to canonical evidence. Each scanner and kind selects `total` or `external` references, an explicit minimum reference count, `WARN` or `FAIL` orphan severity, and whether the scanner must produce declarations. Exact exceptions require scanner, kind, item id, declaration path, and a reason. An exception never turns an orphan into `PASS`; it remains visible as `WARN`. Exceptions that no longer suppress an orphan are reported as stale warnings, and evidence scanners without an audit rule are also visible warnings.
+
+```json
+{
+  "version": 1,
+  "repository": "example-webapp",
+  "tsconfig": "tsconfig.json",
+  "symbolScanners": [
+    { "id": "exports", "kind": "export", "paths": ["src/**/*.ts"], "excludePaths": ["src/public-api.ts"] },
+    { "id": "handlers", "kind": "handler", "paths": ["src/handlers/**/*.ts"], "excludePaths": [] }
+  ],
+  "catalogScanners": [
+    { "id": "routes", "kind": "route", "catalog": "config/routes.json", "catalogMode": "top-level-string-values", "usagePaths": ["src/**/*.ts"], "callees": ["router.get", "router.post"], "argumentIndex": 0 },
+    { "id": "translations", "kind": "translation", "catalog": "locales/en.json", "catalogMode": "flattened-keys", "usagePaths": ["src/**/*.ts"], "callees": ["t"], "argumentIndex": 0 }
+  ]
+}
+```
+
+```sh
+bun run orphan:collect:static --root . --policy /private/path/static-orphan-policy.json --collected-at 2026-09-16T17:30:00Z --json > orphan-evidence.json
+bun run orphan:evidence --file ./orphan-evidence.json
+bun run audit:orphans --evidence-file ./orphan-evidence.json --policy /private/path/orphan-policy.json
+```
+
+The canonical evidence validator and audit core are offline and read only. The static collector reads only the configured repository, TypeScript project, and JSON catalogs. It performs no network calls, package installation, Git mutation, environment inspection, or repository writes, and it never generates collection timestamps. Static reference evidence is engineering evidence, not proof that runtime code paths are reachable. Organization-specific exclusions, minimum reference counts, severities, and exceptions stay outside the public toolkit.
