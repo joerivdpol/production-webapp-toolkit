@@ -2,7 +2,7 @@
 
 Production Webapp Toolkit is a small, reusable set of CI gates, repository diagnostics, and development templates for existing TypeScript/Bun web applications. It addresses a common migration problem: a repository needs stronger safeguards now, but enforcing every modern rule across all legacy code at once is not practical.
 
-The toolkit is generic, read-only where it inspects other repositories, and contains no application or provider configuration.
+The toolkit is generic, read-only where it inspects other repositories, and contains no application or provider configuration. Planned evolution is tracked in [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Quality-gate model
 
@@ -21,7 +21,7 @@ bun run audit /path/to/repository
 bun run audit:git-governance /path/to/repository
 bun run audit:production-baseline /path/to/repository --expected-ref origin/production/example --compare-ref HEAD
 bun run audit:deployment /path/to/repository --expected-ref origin/production/example --deployed-commit 0123456789abcdef0123456789abcdef01234567
-bun run audit:repository-status /path/to/repository --expected-ref origin/production/example --compare-ref HEAD
+bun run audit:repository-status /path/to/repository --expected-ref origin/production/example --deployed-commit 0123456789abcdef0123456789abcdef01234567
 bun run audit:all --projects-root "$HOME/projects"
 bun run lint:changed origin/main
 ```
@@ -118,24 +118,44 @@ The command is offline and read only. It reads only the explicitly supplied evid
 
 ## Repository status
 
-`bun run audit:repository-status /path/to/repository` combines the existing profiled quality, offline Git-governance, and optional production-baseline audits into one read-only scorecard. It does not reimplement their rules or infer production truth.
+`bun run audit:repository-status /path/to/repository` combines the existing profiled quality, offline Git-governance, optional production-baseline, and optional deployment-verification audits into one read-only scorecard. It composes their canonical results rather than reimplementing their rules or inferring production truth.
 
-`QUALITY` passes only when the detected webapp or Python-service profile passes its required core checks. `GOVERNANCE` preserves the Git governance audit's `PASS`, `WARN`, or `FAIL` result. `BASELINE` is run only when `--expected-ref <git-ref>` and/or `--expected-commit <commit>` is explicitly supplied; all three baseline options are forwarded unchanged, including the baseline auditor's revision-expression restrictions.
+The scorecard has four dimensions: `QUALITY`, `GOVERNANCE`, `BASELINE`, and `DEPLOYMENT`. `QUALITY` passes only when the detected webapp or Python-service profile passes its required core checks. `GOVERNANCE` preserves the Git governance audit result. `BASELINE` runs only when `--expected-ref <git-ref>` and/or `--expected-commit <commit>` is explicitly supplied. `DEPLOYMENT` runs only when a baseline is explicit and exactly one deployment evidence input is supplied.
 
-Without an explicit baseline selector, the scorecard reports `baselineConfigured: false` in JSON and `BASELINE NOT_CONFIGURED`. This means no production truth has been declared; it never selects from production-like candidates, `main`, `origin/main`, or a remote default branch. It is a readiness warning, not a technical defect.
+Without an explicit baseline selector, JSON reports `baselineConfigured: false` and the scorecard shows `BASELINE NOT_CONFIGURED`. Without deployment evidence, JSON reports `deploymentConfigured: false` and the scorecard shows `DEPLOYMENT NOT_CONFIGURED`. Either unconfigured dimension is a readiness warning rather than a technical defect, so a fully passing repository status now requires both an explicit matching baseline and an explicit matching deployment.
+
+Use a direct deployed object ID:
 
 ```sh
-bun run audit:repository-status /path/to/repository --expected-ref origin/production/example --compare-ref HEAD
-bun run audit:repository-status /path/to/repository --expected-ref origin/production/example --compare-ref HEAD --json
+bun run audit:repository-status /path/to/repository \
+  --expected-ref origin/production/example \
+  --deployed-commit 0123456789abcdef0123456789abcdef01234567
 ```
 
-The top-level JSON has stable `root`, `profile`, `baselineConfigured`, `dimensions`, `technicalStatus`, `overallStatus`, and `summary` fields. `WARN` is not a technical failure: governance warnings, an unconfigured baseline, and baseline `MISMATCH` or `UNVERIFIED` exit 0. The command exits 1 only for `overallStatus: FAIL`, including quality failure, governance technical failure, or a configured baseline technical failure; it exits 0 for `PASS` and `WARN`.
+Or use a Runtime Evidence Contract v1 file:
+
+```sh
+bun run audit:repository-status /path/to/repository \
+  --expected-ref origin/production/example \
+  --evidence-file ./runtime-evidence.json
+```
+`--deployed-commit` and `--evidence-file` are mutually exclusive. Deployment evidence without an explicit baseline is rejected. Direct commits use the canonical full-object-ID validator; evidence files use the canonical Runtime Evidence Contract validator and deployment comparison adapter. Missing, unreadable, malformed, or schema-invalid evidence files are CLI input failures with exit 1 and never fall back to another commit source.
+
+The deployment dimension retains canonical trust metadata in JSON, including `deployedCommit`, `deploymentStatus`, `technicalStatus`, `evidence.type`, `source`, `authenticated`, and, for runtime evidence, `collectedAt` plus runtime name and optional environment. `authenticated: true` remains metadata and does not alter deployment status.
+
+The top-level JSON keeps the existing `root`, `profile`, `baselineConfigured`, `dimensions`, `technicalStatus`, `overallStatus`, and `summary` fields and adds `deploymentConfigured` plus `dimensions.deployment` and `summary.deployment`.
+
+`WARN` is not a technical failure. Governance warnings, an unconfigured baseline, an unconfigured deployment, baseline `MISMATCH` or `UNVERIFIED`, and deployment `MISMATCH` or `UNVERIFIED` exit 0. Quality failure or a technical audit failure produces overall `FAIL` and exit 1. Runtime evidence never selects the production baseline; only explicit baseline selectors do that.
+
+The repository-status layer adds no network access, runtime probing, target-repository writes, Git mutation, or production inference. Evidence-file mode reads only the requested evidence document through the deployment-verification adapter.
 
 ## Ecosystem status
 
-`bun run audit:ecosystem-status` aggregates the canonical repository-status report for several repositories. It does not add QUALITY, GOVERNANCE, or BASELINE rules, choose a branch, or infer a production baseline from `main`, remote `HEAD`, or governance production candidates.
+`bun run audit:ecosystem-status` aggregates the canonical repository-status report for several repositories. It does not add QUALITY, GOVERNANCE, BASELINE, or DEPLOYMENT rules, choose a branch, or infer a production baseline from `main`, remote `HEAD`, or governance production candidates.
 
-Use positional repository paths when no repository has a configured production baseline. Every positional repository therefore reports `BASELINE NOT_CONFIGURED` and contributes an overall warning when its other dimensions pass:
+The current ecosystem configuration contract does not yet accept deployment evidence. Repository reports therefore include `DEPLOYMENT NOT_CONFIGURED`, so an otherwise passing repository contributes an overall warning even when its baseline matches. Deployment-aware ecosystem configuration and aggregate deployment counts are the next planned capability; see `docs/roadmap.md`.
+
+Use positional repository paths when no repository has a configured production baseline. Every positional repository therefore reports both `BASELINE NOT_CONFIGURED` and `DEPLOYMENT NOT_CONFIGURED` and contributes an overall warning when its other dimensions pass:
 
 ```sh
 bun run audit:ecosystem-status /path/to/app-a /path/to/worker-b --json
