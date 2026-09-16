@@ -1193,6 +1193,39 @@ bun run audit:performance -- \
 
 The evidence validator and budget auditor are offline and read only. Measurement collection remains provider-specific and separate from the public generic budget engine.
 
+### Accessibility gates
+
+`bun run runtime:accessibility` opens explicitly configured critical public routes in headless Chromium and runs `axe-core` against an explicit set of rule tags. Each route declares the expected status, timeout, tags, and maximum allowed node counts for `critical`, `serious`, `moderate`, `minor`, and unknown impact violations. The report keeps only stable axe rule ids, normalized impact, and affected-node counts; DOM snippets, selectors, help text, response bodies, and page content are not retained.
+
+The request boundary matches the frontend runtime safety model: public routes require HTTPS except for loopback HTTP, URL credentials/query strings/fragments are rejected, service workers are blocked, no browser credentials are configured, only `GET`, `HEAD`, and `OPTIONS` are permitted, mutation methods are aborted, and cross-origin navigation is blocked. Any page-initiated mutation attempt is itself a blocking accessibility-run finding so a supposedly observational route cannot silently perform writes during the gate.
+
+```json
+{
+  "version": 1,
+  "suite": "critical-routes",
+  "routes": [
+    {
+      "id": "homepage",
+      "url": "https://example.com/",
+      "expectedStatuses": [200],
+      "timeoutMs": 5000,
+      "tags": ["wcag2a", "wcag2aa", "wcag21aa"],
+      "maxCritical": 0,
+      "maxSerious": 0,
+      "maxModerate": 0,
+      "maxMinor": 0,
+      "maxUnknown": 0
+    }
+  ]
+}
+```
+
+```sh
+bun run runtime:accessibility -- --policy /private/path/accessibility-policy.json --json
+```
+
+The toolkit does not claim that automated axe checks prove full accessibility conformance. The gate detects the configured automated rule surface only; manual keyboard, assistive-technology, content, and usability review remain outside this automated evidence.
+
 ```json
 {
   "version": 1,

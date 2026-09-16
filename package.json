@@ -37,6 +37,7 @@
     "runtime:frontend": "node scripts/run-frontend-runtime-checks.js",
     "performance:evidence": "node scripts/performance-evidence.js",
     "audit:performance": "node scripts/audit-performance-budgets.js",
+    "runtime:accessibility": "node scripts/run-accessibility-gates.js",
     "ci:evidence": "node scripts/ci-evidence.js",
     "bootstrap": "node scripts/bootstrap-repository.js",
     "remediation:plan": "node scripts/plan-remediation.js",
@@ -93,6 +94,7 @@
   "devDependencies": {
     "@playwright/test": "1.61.1",
     "@types/node": "22.19.17",
+    "axe-core": "4.13.0",
     "eslint": "9.39.4",
     "typescript": "5.9.3"
   }
