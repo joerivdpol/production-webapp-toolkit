@@ -29,6 +29,8 @@
     "runtime:collector:adapt": "node scripts/runtime-collector-adapter.js",
     "runtime:checkout:collect": "node scripts/collect-git-checkout-runtime-evidence.js",
     "runtime:application:collect": "node scripts/collect-application-runtime-evidence.js",
+    "runtime:container:collect": "node scripts/collect-docker-container-runtime-evidence.js",
+    "runtime:process:collect": "node scripts/collect-process-runtime-evidence.js",
     "ci:evidence": "node scripts/ci-evidence.js",
     "bootstrap": "node scripts/bootstrap-repository.js",
     "remediation:plan": "node scripts/plan-remediation.js",

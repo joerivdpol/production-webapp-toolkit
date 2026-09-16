@@ -1055,6 +1055,29 @@ bun run runtime:application:collect -- --url https://example.com/version --json
 
 `authenticated` remains `false`: HTTPS transport or local file access does not prove that the application report is authentic. The `application-reported` scope is preserved by deployment verification and is reported as a scope claim rather than independent authentication proof.
 
+### Container and process runtime evidence
+
+`bun run runtime:container:collect` binds a running Docker container to an exact Git object ID exposed through one explicitly selected container label. The default is the standard OCI revision label `org.opencontainers.image.revision`; a different portable label name can be supplied explicitly. The collector runs only Docker `inspect`, checks that the container is currently running, and reads only the requested revision label. It does not inspect container environment variables, execute commands in the container, fetch images, or mutate Docker state. Runtime name and optional environment remain explicit caller inputs.
+
+```sh
+bun run runtime:container:collect -- \
+  --container web-production \
+  --runtime-name web \
+  --environment production \
+  --json
+```
+
+`bun run runtime:process:collect` is for a live local process that deliberately exposes the same bounded build identity over an HTTP endpoint on a Unix domain socket. The collector sends only a GET request, defaults to `/version`, accepts only an absolute local socket path, limits the response to 64 KiB, and emits `identityScope: process`. This avoids inspecting process environment variables, command lines, memory, or arbitrary operating-system process metadata.
+
+```sh
+bun run runtime:process:collect -- \
+  --socket /run/example/runtime.sock \
+  --endpoint /version \
+  --json
+```
+
+Both collectors emit `authenticated: false`. A Docker daemon observation or a live local socket response provides stronger runtime binding than checkout evidence, but the toolkit does not claim cryptographic authenticity that it did not verify. Collector kind, identity scope, source, and collection time remain visible in canonical Runtime Evidence v1 and in deployment verification.
+
 ```json
 {
   "version": 1,
