@@ -830,3 +830,19 @@ bun run test:select \
 ```
 
 The public toolkit does not hardcode project-specific test commands or business domains. Projects and private organization policy decide which generic test ids are blocking and which surface changes require additional checks.
+
+### Flaky test detection from repeated CI evidence
+
+`bun run audit:flaky-tests` evaluates repeated canonical CI Evidence v1 documents for one explicit CI provider and optional workflow. Flakiness is never inferred from a single failure. A configured check becomes `FLAKY` only after the policy minimum number of non skipped observations and after both the configured pass and failure thresholds have been observed. Consistently failing checks are therefore `STABLE` for flakiness purposes; ordinary CI verification remains responsible for reporting that they are failing.
+
+Flaky Test Policy v1 explicitly names the checks to evaluate and marks each as `blocking` or `advisory`. Blocking flakiness produces `FAIL`; advisory flakiness produces `WARN`. Insufficient evidence is `UNVERIFIED` and also warns. `SKIPPED` and missing checks are reported but do not count as pass or failure observations. Every observation must carry an explicit CI run id. Duplicate run identifiers, provider mismatches, and workflow mismatches fail closed instead of being double counted or mixed across ambiguous cohorts.
+
+```sh
+bun run audit:flaky-tests \
+  --policy /private/path/flaky-test-policy.json \
+  --evidence-file ./ci-run-101.json \
+  --evidence-file ./ci-run-102.json \
+  --evidence-file ./ci-run-103.json
+```
+
+The audit core is offline and read only and reuses the canonical CI Evidence v1 validator. It stores no CI history itself, reads no test logs, and does not claim why a check changed outcome. The public toolkit supplies detection semantics; projects and private organization policy decide which CI checks are blocking and how much evidence is required.
