@@ -1435,3 +1435,40 @@ bun run audit:authorization -- \
 ```
 
 This is structural call-presence evidence, not a proof of authorization semantics or control-flow dominance. It can prove that configured server guard calls are absent or structurally present in explicit files; it does not prove that every runtime path passes through a guard or that a named guard enforces the correct role. Policy authors remain responsible for binding the correct guard functions and private authorization policy ids. Source files are bounded regular files, symbolic links are not followed, malformed source fails closed, source text is not copied into reports, and the audit performs no network calls, subprocess execution, runtime environment inspection, or repository mutation.
+
+### Webhook safety audit
+
+`bun run audit:webhook-safety` evaluates explicit TypeScript/JavaScript webhook safety profiles. Every configured webhook must make an explicit policy choice for six generic engineering controls: signature verification, idempotency, replay handling, event ordering, retry safety, and unknown-event handling. Provider names, event names, credentials, and application business rules are not embedded in the public toolkit.
+
+Each control declares a severity of `FAIL`, `WARN`, or `IGNORE`, explicit evidence files, and exact call-expression names. Non-ignored controls require evidence bindings. `IGNORE` may omit evidence, but the audit emits a visible warning and makes no safety claim. Call detection uses the same canonical TypeScript AST evidence engine as the authorization audit, so comments, strings, and similar identifiers cannot masquerade as control calls.
+
+```json
+{
+  "version": 1,
+  "webhooks": [
+    {
+      "id": "provider-events",
+      "handlerFiles": ["src/webhooks/provider.ts"],
+      "controls": {
+        "signatureVerification": { "severity": "FAIL", "evidenceFiles": ["src/webhooks/provider.ts"], "callees": ["verifyWebhookSignature"] },
+        "idempotency": { "severity": "FAIL", "evidenceFiles": ["src/webhooks/provider.ts"], "callees": ["claimEvent"] },
+        "replayHandling": { "severity": "FAIL", "evidenceFiles": ["src/webhooks/security.ts"], "callees": ["rejectReplay"] },
+        "eventOrdering": { "severity": "WARN", "evidenceFiles": ["src/webhooks/order.ts"], "callees": ["enforceEventOrder"] },
+        "retrySafety": { "severity": "FAIL", "evidenceFiles": ["src/webhooks/retry.ts"], "callees": ["scheduleRetry"] },
+        "unknownEvents": { "severity": "FAIL", "evidenceFiles": ["src/webhooks/provider.ts"], "callees": ["handleUnknownEvent"] }
+      }
+    }
+  ]
+}
+```
+
+```sh
+bun run audit:webhook-safety -- \
+  --root /path/to/repository \
+  --policy /private/path/webhook-safety-policy.json \
+  --json
+```
+
+Centralized safety wrappers and middleware are supported by pointing multiple controls at explicit helper files. The evidence remains deliberately structural: call presence does not prove execution order, control-flow dominance, persistence uniqueness, replay-window semantics, provider signature correctness, retry backoff behavior, or application-specific event ordering. Those properties require stronger integration, database, or provider-specific evidence outside this generic static layer.
+
+The audit is local and read only. It accepts only bounded regular JavaScript/TypeScript source files, does not follow symbolic links, fails closed on malformed or uninspectable evidence files, emits no source payloads, and performs no network calls, subprocess execution, runtime environment inspection, webhook delivery, provider mutation, or repository mutation.
