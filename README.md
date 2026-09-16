@@ -220,6 +220,39 @@ Source availability is part of the result. A known absent requirement is `FAIL`.
 
 The audit never changes repository settings, rulesets, branches, reviews, or checks. It performs no POST, PUT, PATCH, DELETE, Git mutation, or token output. Policy failure exits 1, technical provider/input failure exits 1, and fully verified PASS exits 0; `UNVERIFIED` policy results remain WARN and exit 0.
 
+### Environment Contract audit
+
+`bun run audit:env-contract` compares explicit environment configuration policy with statically discoverable code usage and safe example templates. It never reads `.env` runtime files, process environment values, secrets managers, network resources, or Git metadata.
+
+A version 1 contract is explicit about which source roots are scanned, which example/sample/template files document keys, and which variables are required, public, or server only:
+
+```json
+{
+  "version": 1,
+  "scanRoots": ["src", "server"],
+  "exampleFiles": [".env.example"],
+  "variables": [
+    { "name": "PUBLIC_API_URL", "required": true, "exposure": "public", "documented": true },
+    { "name": "PAYMENT_SECRET_KEY", "required": true, "exposure": "server", "documented": true }
+  ]
+}
+```
+
+Run it with an explicit contract file:
+
+```sh
+bun run audit:env-contract /path/to/repository \
+  --contract /path/to/environment-contract.json
+```
+
+Supported static accessors include Node `process.env`, Bun `Bun.env`, Deno `Deno.env.get`, Vite style `import.meta.env`, and SvelteKit `$env/static/*` plus `$env/dynamic/*` named imports. Known browser public conventions such as `NEXT_PUBLIC_`, `REACT_APP_`, `PUBLIC_`, Vite `import.meta.env`, and SvelteKit public imports are treated as public access. Vite built ins such as `MODE`, `DEV`, `PROD`, `SSR`, and `BASE_URL` are ignored because they are platform metadata rather than application environment variables.
+
+Required contract variables that are not referenced fail the audit. Undeclared environment references, undeclared example keys, missing documented keys, and server variables used through a public accessor also fail. Dynamic computed access such as `process.env[key]` cannot be mapped safely and therefore produces `WARN`, not invented variable truth. Large source files above the bounded scan limit also produce a warning. Symlinks are not followed.
+
+Example files are accepted only when their path clearly identifies them as `example`, `sample`, or `template` material. Only key names to the left of `=` are retained; values are never included in reports. Missing declared scan roots or example files are contract failures rather than technical crashes. Runtime `process.env` is never consulted, so values present in the auditor process cannot affect or leak into the result.
+
+The audit is local and read only. It performs no repository writes, Git commands, network requests, shell commands, secret manager access, or environment reads. `PASS` and `WARN` exit 0; contract violations, invalid contract input, or technical inspection failures exit 1.
+
 ## Repository status
 
 `bun run audit:repository-status /path/to/repository` combines the existing profiled quality, offline Git-governance, optional production-baseline, optional deployment-verification, and optional CI-verification audits into one read-only scorecard. It composes their canonical results rather than reimplementing their rules or inferring production truth.
