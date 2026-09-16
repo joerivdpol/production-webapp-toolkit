@@ -53,7 +53,11 @@
     "api:contract:openapi": "node scripts/openapi-api-contract.js",
     "audit:api-contract": "node scripts/audit-api-contract.js",
     "contract:inventory": "node scripts/contract-inventory.js",
-    "audit:cross-contracts": "node scripts/audit-cross-repository-contracts.js"
+    "audit:cross-contracts": "node scripts/audit-cross-repository-contracts.js",
+    "vulnerability:evidence": "node scripts/vulnerability-evidence.js",
+    "vulnerability:osv:collect": "node scripts/collect-osv-vulnerability-evidence.js",
+    "vulnerability:github:collect": "node scripts/collect-github-dependabot-evidence.js",
+    "audit:vulnerabilities": "node scripts/audit-vulnerabilities.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
