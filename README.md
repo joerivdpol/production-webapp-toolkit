@@ -169,7 +169,24 @@ bun run audit:ci \
 
 Verification keeps commit truth and check truth separate. An exact commit with every required check `PASS` is overall `PASS`. A commit mismatch is `WARN` when the required checks otherwise pass. A required check that explicitly reports `FAIL` is blocking overall `FAIL`. A required check that is `SKIPPED` or absent from the evidence is `UNVERIFIED` and produces overall `WARN`. Failed or skipped checks that were not explicitly required do not affect the verification result. Invalid evidence or an invalid verification policy is an input failure rather than a CI status result. `FAIL` verification exits 1; `PASS` and `WARN` verification exit 0.
 
-Both commands are offline and read only. They read only the explicitly supplied evidence file, run no Git command, make no network request, read no environment variables, and write no files. CI Evidence Contract validity does not prove that the source is authenticated or that a provider actually produced the document. Collection and provider authentication are separate future adapters.
+Both commands are offline and read only. They read only the explicitly supplied evidence file, run no Git command, make no network request, read no environment variables, and write no files. CI Evidence Contract validity does not prove that the source is authenticated or that a provider actually produced the document. Collection and provider authentication are separate adapters.
+
+### GitHub Actions CI evidence adapter
+
+`bun run ci:evidence:github-actions` converts explicit GitHub Actions workflow-run and jobs REST payloads into CI Evidence Contract v1. The adapter itself remains offline and read only: it does not call GitHub, read authentication tokens, inspect environment variables, or write output files. The caller is responsible for obtaining the two payloads and supplying an explicit collection timestamp.
+
+```sh
+bun run ci:evidence:github-actions \
+  --run-file ./workflow-run.json \
+  --jobs-file ./workflow-jobs.json \
+  --collected-at 2026-09-16T07:40:29Z \
+  --authenticated \
+  --json
+```
+
+The workflow run must have `status: completed`, a non-empty name, a valid run ID, a full `head_sha`, and a conclusion. Every job must belong to that run, have `status: completed`, and have a unique non-empty name. GitHub job conclusions map deterministically: `success` becomes `PASS`; `skipped` and `neutral` become `SKIPPED`; `failure`, `cancelled`, `timed_out`, `action_required`, `startup_failure`, and `stale` become `FAIL`. Unknown conclusions, in-progress runs or jobs, mismatched run IDs, duplicate job names, or empty job sets are rejected rather than guessed.
+
+The adapter emits `provider: github-actions`, the workflow name, the run ID, and job names as CI check names. `--authenticated` only records a caller-supplied trust claim that the input payloads came through an authenticated collection path; it is not cryptographic proof and does not alter CI verification truth. `--collected-at` is mandatory because the adapter never generates or substitutes a collection time. A separate online collector may later obtain GitHub payloads automatically, but it will feed this same adapter and contract rather than changing verification semantics.
 
 ## Repository status
 
