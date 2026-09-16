@@ -6,8 +6,13 @@ import { pathToFileURL } from "node:url";
 import { inspectProfiledRepository } from "./audit-profiled-repository.js";
 import { inspectGitGovernance } from "./audit-git-governance.js";
 import { inspectProductionBaseline } from "./audit-production-baseline.js";
+import {
+  inspectDeploymentVerification,
+  inspectDeploymentVerificationFromEvidenceFile,
+  isFullObjectId,
+} from "./audit-deployment-verification.js";
 
-/** @typedef {{ expectedRef?: string | null, expectedCommit?: string | null, compareRef?: string | null }} BaselineOptions */
+/** @typedef {{ expectedRef?: string | null, expectedCommit?: string | null, compareRef?: string | null, deployedCommit?: string | null, evidenceFile?: string | null }} StatusOptions */
 
 /** @param {unknown} error */
 function errorDetail(error) {
@@ -81,7 +86,7 @@ function inspectGovernance(target) {
   }
 }
 
-/** @param {string} target @param {BaselineOptions} options */
+/** @param {string} target @param {StatusOptions} options */
 function inspectBaseline(target, options) {
   try {
     const report = inspectProductionBaseline(target, options);
@@ -143,37 +148,114 @@ function notConfiguredBaseline() {
   };
 }
 
+/** @param {ReturnType<typeof inspectDeploymentVerification>} report */
+function deploymentDimension(report) {
+  return {
+    configured: true,
+    status: report.overallStatus,
+    technicalStatus: report.technicalStatus,
+    deploymentStatus: report.deploymentStatus,
+    overallStatus: report.overallStatus,
+    baselineStatus: report.baselineStatus,
+    expectedRef: report.expectedRef,
+    expectedCommit: report.expectedCommit,
+    expectedResolvedCommit: report.expectedResolvedCommit,
+    deployedCommit: report.deployedCommit,
+    evidence: report.evidence,
+    checks: report.checks,
+  };
+}
+
+function notConfiguredDeployment() {
+  return {
+    configured: false,
+    status: "NOT_CONFIGURED",
+    technicalStatus: "PASS",
+    deploymentStatus: null,
+    overallStatus: null,
+    baselineStatus: null,
+    expectedRef: null,
+    expectedCommit: null,
+    expectedResolvedCommit: null,
+    deployedCommit: null,
+    evidence: null,
+    checks: [],
+  };
+}
+
+/** @param {string} target @param {StatusOptions} options */
+function inspectDeployment(target, options) {
+  if (options.evidenceFile) {
+    const result = inspectDeploymentVerificationFromEvidenceFile(target, {
+      expectedRef: options.expectedRef ?? null,
+      expectedCommit: options.expectedCommit ?? null,
+      evidenceFile: options.evidenceFile,
+    });
+    if (!result.ok) {
+      const error = new Error(result.error.detail);
+      error.name = "DeploymentEvidenceInputError";
+      throw error;
+    }
+    return deploymentDimension(result.report);
+  }
+
+  if (options.deployedCommit) {
+    return deploymentDimension(inspectDeploymentVerification(target, {
+      expectedRef: options.expectedRef ?? null,
+      expectedCommit: options.expectedCommit ?? null,
+      deployedCommit: options.deployedCommit,
+    }));
+  }
+
+  return notConfiguredDeployment();
+}
+
 /**
  * Compose existing read-only repository auditors. This layer deliberately
  * never uses governance productionCandidates to choose a baseline.
  *
  * @param {string} target
- * @param {BaselineOptions} options
+ * @param {StatusOptions} options
  */
 export function inspectRepositoryStatus(target, options = {}) {
   const root = resolve(target);
   const quality = inspectQuality(root);
   const governance = inspectGovernance(root);
   const baselineConfigured = Boolean(options.expectedRef || options.expectedCommit);
+  const deploymentConfigured = Boolean(options.deployedCommit || options.evidenceFile);
+  if (options.deployedCommit && options.evidenceFile) {
+    throw new Error("deployment evidence inputs are mutually exclusive");
+  }
+  if (deploymentConfigured && !baselineConfigured) {
+    throw new Error("deployment evidence requires an explicit production baseline");
+  }
+
   const baseline = baselineConfigured
     ? inspectBaseline(root, options)
     : notConfiguredBaseline();
+  const deployment = deploymentConfigured
+    ? inspectDeployment(root, options)
+    : notConfiguredDeployment();
 
   const technicalStatus =
     quality.technicalStatus === "FAIL" ||
     governance.technicalStatus === "FAIL" ||
-    (baseline.configured && baseline.technicalStatus === "FAIL")
+    (baseline.configured && baseline.technicalStatus === "FAIL") ||
+    (deployment.configured && deployment.technicalStatus === "FAIL")
       ? "FAIL"
       : "PASS";
 
   const overallStatus =
     quality.status === "FAIL" ||
     governance.status === "FAIL" ||
-    (baseline.configured && baseline.technicalStatus === "FAIL")
+    (baseline.configured && baseline.technicalStatus === "FAIL") ||
+    (deployment.configured && deployment.technicalStatus === "FAIL")
       ? "FAIL"
       : governance.status === "WARN" ||
           !baseline.configured ||
-          baseline.overallStatus === "WARN"
+          baseline.overallStatus === "WARN" ||
+          !deployment.configured ||
+          deployment.overallStatus === "WARN"
         ? "WARN"
         : "PASS";
 
@@ -181,23 +263,28 @@ export function inspectRepositoryStatus(target, options = {}) {
     root,
     profile: quality.profile,
     baselineConfigured: baseline.configured,
-    dimensions: { quality, governance, baseline },
+    deploymentConfigured: deployment.configured,
+    dimensions: { quality, governance, baseline, deployment },
     technicalStatus,
     overallStatus,
     summary: {
       quality: quality.status,
       governance: governance.status,
       baseline: baseline.status,
+      deployment: deployment.status,
     },
   };
 }
 
 /** @param {ReturnType<typeof inspectRepositoryStatus>} report */
 export function formatRepositoryStatus(report) {
-  const { quality, governance, baseline } = report.dimensions;
+  const { quality, governance, baseline, deployment } = report.dimensions;
   const baselineLabel = baseline.configured
     ? `${baseline.status} (${baseline.baselineStatus})`
     : baseline.status;
+  const deploymentLabel = deployment.configured
+    ? `${deployment.status} (${deployment.deploymentStatus})`
+    : deployment.status;
 
   return [
     `Repository status: ${report.root}`,
@@ -205,13 +292,14 @@ export function formatRepositoryStatus(report) {
     `QUALITY     ${quality.status} (${quality.profile}; core ${quality.requiredPassed ?? 0}/${quality.requiredTotal ?? 0})`,
     `GOVERNANCE  ${governance.status}`,
     `BASELINE    ${baselineLabel}`,
+    `DEPLOYMENT  ${deploymentLabel}`,
     "",
     `Technical: ${report.technicalStatus}`,
     `Overall: ${report.overallStatus}`,
   ].join("\n");
 }
 
-/** @typedef {{ expectedRef: string | null, expectedCommit: string | null, compareRef: string | null, json: boolean, target: string | null }} CliArguments */
+/** @typedef {{ expectedRef: string | null, expectedCommit: string | null, compareRef: string | null, deployedCommit: string | null, evidenceFile: string | null, json: boolean, target: string | null }} CliArguments */
 /** @param {string[]} argv @returns {CliArguments | null} */
 export function parseArguments(argv) {
   /** @type {CliArguments} */
@@ -219,6 +307,8 @@ export function parseArguments(argv) {
     expectedRef: null,
     expectedCommit: null,
     compareRef: null,
+    deployedCommit: null,
+    evidenceFile: null,
     json: false,
     target: null,
   };
@@ -232,7 +322,9 @@ export function parseArguments(argv) {
     } else if (
       argument === "--expected-ref" ||
       argument === "--expected-commit" ||
-      argument === "--compare-ref"
+      argument === "--compare-ref" ||
+      argument === "--deployed-commit" ||
+      argument === "--evidence-file"
     ) {
       const value = argv[index + 1];
       if (typeof value !== "string" || !value || value.startsWith("--")) return null;
@@ -240,6 +332,8 @@ export function parseArguments(argv) {
       if (argument === "--expected-ref") options.expectedRef = value;
       if (argument === "--expected-commit") options.expectedCommit = value;
       if (argument === "--compare-ref") options.compareRef = value;
+      if (argument === "--deployed-commit") options.deployedCommit = value;
+      if (argument === "--evidence-file") options.evidenceFile = value;
       index += 1;
     } else if (argument.startsWith("-")) {
       return null;
@@ -250,7 +344,12 @@ export function parseArguments(argv) {
     }
   }
 
-  if (options.compareRef && !options.expectedRef && !options.expectedCommit) return null;
+  const baselineConfigured = Boolean(options.expectedRef || options.expectedCommit);
+  const deploymentConfigured = Boolean(options.deployedCommit || options.evidenceFile);
+  if (options.compareRef && !baselineConfigured) return null;
+  if (deploymentConfigured && !baselineConfigured) return null;
+  if (options.deployedCommit !== null && options.evidenceFile !== null) return null;
+  if (options.deployedCommit !== null && !isFullObjectId(options.deployedCommit)) return null;
   return options;
 }
 
@@ -258,12 +357,18 @@ export function main(argv = process.argv.slice(2)) {
   const options = parseArguments(argv);
   if (!options) {
     console.error(
-      "Usage: node scripts/audit-repository-status.js [repository] [--expected-ref <git-ref> | --expected-commit <commit>] [--compare-ref <git-ref>] [--json]",
+      "Usage: node scripts/audit-repository-status.js [repository] [--expected-ref <git-ref> | --expected-commit <commit>] [--compare-ref <git-ref>] [--deployed-commit <40-or-64-hex-object-id> | --evidence-file <runtime-evidence.json>] [--json]",
     );
     return 1;
   }
 
-  const report = inspectRepositoryStatus(options.target ?? process.cwd(), options);
+  let report;
+  try {
+    report = inspectRepositoryStatus(options.target ?? process.cwd(), options);
+  } catch (error) {
+    console.error(errorDetail(error));
+    return 1;
+  }
   console.log(options.json ? JSON.stringify(report) : formatRepositoryStatus(report));
   return report.overallStatus === "FAIL" ? 1 : 0;
 }

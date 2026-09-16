@@ -35,7 +35,7 @@ import { validateRuntimeEvidence } from "./runtime-evidence.js";
  */
 
 /** @param {string} value */
-function isFullObjectId(value) {
+export function isFullObjectId(value) {
   return /^[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?$/.test(value);
 }
 
@@ -251,6 +251,54 @@ export function inspectDeploymentVerification(target, options = {}) {
   });
 }
 
+/**
+ * Read and canonically validate an explicit Runtime Evidence Contract file,
+ * then compare its normalized deployment commit with the explicit baseline.
+ * File and schema failures are returned as input errors rather than deployment
+ * mismatches or unverifiable runtime claims.
+ *
+ * @param {string} target
+ * @param {{ expectedRef?: string | null, expectedCommit?: string | null, evidenceFile: string }} options
+ * @returns {{ ok: true, report: DeploymentVerificationReport } | { ok: false, error: { id: string, detail: string } }}
+ */
+export function inspectDeploymentVerificationFromEvidenceFile(target, options) {
+  let input;
+  try {
+    input = JSON.parse(fs.readFileSync(options.evidenceFile, "utf8"));
+  } catch (error) {
+    return {
+      ok: false,
+      error: {
+        id: error instanceof SyntaxError ? "evidence-json-malformed" : "evidence-file-read-failed",
+        detail: error instanceof SyntaxError
+          ? "Deployment evidence file contains malformed JSON"
+          : "Deployment evidence file could not be read",
+      },
+    };
+  }
+  const validation = validateRuntimeEvidence(input);
+  if (!validation.valid || !validation.evidence) {
+    return {
+      ok: false,
+      error: {
+        id: "evidence-schema-invalid",
+        detail: "Deployment evidence file does not satisfy Runtime Evidence Contract v1",
+      },
+    };
+  }
+
+  const evidence = runtimeEvidenceTrustMetadata(validation.evidence);
+  return {
+    ok: true,
+    report: inspectNormalizedDeploymentVerification(target, {
+      expectedRef: options.expectedRef ?? null,
+      expectedCommit: options.expectedCommit ?? null,
+      deployedCommit: validation.evidence.deployment.commit,
+      evidence,
+    }),
+  };
+}
+
 /** @param {DeploymentVerificationReport} report */
 export function formatDeploymentVerification(report) {
   const evidenceDescription =
@@ -345,43 +393,28 @@ export function main(argv = process.argv.slice(2)) {
     return 1;
   }
 
-  /** @type {DeploymentOptions} */
-  const inspectionOptions = {
-    expectedRef: options.expectedRef,
-    expectedCommit: options.expectedCommit,
-    deployedCommit: options.deployedCommit,
-  };
   /** @type {DeploymentVerificationReport} */
   let report;
   if (options.evidenceFile !== null) {
-    let input;
-    try {
-      input = JSON.parse(fs.readFileSync(options.evidenceFile, "utf8"));
-    } catch (error) {
-      console.error(
-        error instanceof SyntaxError
-          ? "Deployment evidence file contains malformed JSON"
-          : "Deployment evidence file could not be read",
-      );
+    const result = inspectDeploymentVerificationFromEvidenceFile(
+      options.target ?? process.cwd(),
+      {
+        expectedRef: options.expectedRef,
+        expectedCommit: options.expectedCommit,
+        evidenceFile: options.evidenceFile,
+      },
+    );
+    if (!result.ok) {
+      console.error(result.error.detail);
       return 1;
     }
-
-    const validation = validateRuntimeEvidence(input);
-    if (!validation.valid || !validation.evidence) {
-      console.error("Deployment evidence file does not satisfy Runtime Evidence Contract v1");
-      return 1;
-    }
-    const evidence = runtimeEvidenceTrustMetadata(validation.evidence);
-    inspectionOptions.deployedCommit = validation.evidence.deployment.commit;
-    inspectionOptions.evidence = evidence;
-    report = inspectNormalizedDeploymentVerification(options.target ?? process.cwd(), {
+    report = result.report;
+  } else {
+    report = inspectDeploymentVerification(options.target ?? process.cwd(), {
       expectedRef: options.expectedRef,
       expectedCommit: options.expectedCommit,
-      deployedCommit: validation.evidence.deployment.commit,
-      evidence,
+      deployedCommit: options.deployedCommit,
     });
-  } else {
-    report = inspectDeploymentVerification(options.target ?? process.cwd(), inspectionOptions);
   }
   console.log(options.json ? JSON.stringify(report) : formatDeploymentVerification(report));
   return report.technicalStatus === "FAIL" ? 1 : 0;

@@ -133,21 +133,22 @@ afterEach(() => {
   }
 });
 
-test("config mode aggregates two matching baseline repositories as PASS", () => {
+test("matching baselines without deployment remain ecosystem WARN", () => {
   const webapp = createWebapp();
   const python = createPythonService();
   const result = runCli("--config", config([
     { name: "app-a", path: webapp.root, expectedRef: "main", compareRef: "HEAD" },
     { name: "worker-b", path: python.root, expectedRef: "main", compareRef: "HEAD" },
   ]), "--json");
-  /** @type {{ inputMode: string, configVersion: number, overallStatus: string, repositories: Array<{ profile: string }> }} */
+  /** @type {{ inputMode: string, configVersion: number, overallStatus: string, repositories: Array<{ profile: string, dimensions: { deployment: { status: string } } }> }} */
   const report = JSON.parse(result.stdout);
 
   assert.equal(result.status, 0);
   assert.equal(report.inputMode, "config");
   assert.equal(report.configVersion, 1);
-  assert.equal(report.overallStatus, "PASS");
+  assert.equal(report.overallStatus, "WARN");
   assert.deepEqual(report.repositories.map((repository) => repository.profile), ["webapp", "python-service"]);
+  assert.deepEqual(report.repositories.map((repository) => repository.dimensions.deployment.status), ["NOT_CONFIGURED", "NOT_CONFIGURED"]);
 });
 
 test("quality failure is blocking while governance warning is a non-blocking WARN", () => {
@@ -210,7 +211,7 @@ test("technical and missing repository failures are isolated while later reposit
   assert.deepEqual(report.repositories.map((repository) => repository.name), ["broken", "missing", "good"]);
   assert.equal(report.repositories[0]?.technicalStatus, "FAIL");
   assert.equal(report.repositories[1]?.overallStatus, "FAIL");
-  assert.equal(report.repositories[2]?.overallStatus, "PASS");
+  assert.equal(report.repositories[2]?.overallStatus, "WARN");
   assert.equal(report.technicalStatus, "FAIL");
   assert.equal(report.overallStatus, "FAIL");
 });
@@ -299,7 +300,7 @@ test("JSON output, aggregate summary, order, and human scorecard are stable", ()
   assert.deepEqual(report.repositories.map((repository) => repository.name), ["first", "second", "third"]);
   assert.deepEqual(report.summary, {
     repositories: { total: 3 },
-    overall: { pass: 1, warn: 1, fail: 1 },
+    overall: { pass: 0, warn: 2, fail: 1 },
     technical: { pass: 3, fail: 0 },
     quality: { pass: 2, fail: 1 },
     governance: { pass: 3, warn: 0, fail: 0 },
