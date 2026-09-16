@@ -66,7 +66,8 @@
     "artifact:provenance": "node scripts/artifact-provenance.js",
     "audit:artifact-provenance": "node scripts/audit-artifact-provenance.js",
     "change:evidence": "node scripts/change-surface-evidence.js",
-    "audit:release-risk": "node scripts/audit-release-risk.js"
+    "audit:release-risk": "node scripts/audit-release-risk.js",
+    "change:analyze": "node scripts/analyze-changed-surface.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
