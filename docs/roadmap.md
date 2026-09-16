@@ -34,8 +34,9 @@ Core principles:
 * Repository status deployment dimension: merged.
 * Ecosystem status deployment dimension: merged.
 * Evidence freshness: merged.
-* Runtime identity binding: implemented; awaiting merge.
-* Reproducible release checks and v1.1.0 release remain open.
+* Runtime identity binding: merged.
+* Reproducible toolchain and v1.1 release-readiness gate: implemented; awaiting merge.
+* Final v1.1.0 version bump, release PR, tag, and published release remain open.
 
 ## v1.2 Production readiness
 
