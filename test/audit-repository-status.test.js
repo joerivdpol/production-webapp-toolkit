@@ -155,6 +155,30 @@ function writeEvidenceFile(evidence) {
   return file;
 }
 
+/** @param {string} commit @returns {Record<string, any>} */
+function ciEvidence(commit) {
+  return {
+    version: 1,
+    commit,
+    ci: { provider: "github-actions", workflow: "CI", runId: "12345" },
+    evidence: { source: "github-api", authenticated: false, collectedAt: "2026-09-03T00:00:00Z" },
+    checks: [
+      { name: "typecheck", status: "PASS" },
+      { name: "test", status: "PASS" },
+      { name: "lint", status: "PASS" },
+      { name: "build", status: "PASS" },
+    ],
+  };
+}
+
+/** @param {unknown} evidence */
+function writeCiEvidenceFile(evidence) {
+  const directory = temporaryDirectory("repository-status-ci-evidence-");
+  const file = path.join(directory, "ci-evidence.json");
+  fs.writeFileSync(file, JSON.stringify(evidence));
+  return file;
+}
+
 afterEach(() => {
   for (const root of fixtures.splice(0).reverse()) {
     fs.rmSync(root, { recursive: true, force: true });
@@ -303,6 +327,7 @@ test("has stable parseable JSON, a compact scorecard, and strict CLI validation"
     "profile",
     "baselineConfigured",
     "deploymentConfigured",
+    "ciConfigured",
     "dimensions",
     "technicalStatus",
     "overallStatus",
@@ -310,7 +335,7 @@ test("has stable parseable JSON, a compact scorecard, and strict CLI validation"
   ]) {
     assert.ok(field in parsed, `expected JSON field ${field}`);
   }
-  for (const field of ["quality", "governance", "baseline", "deployment"]) {
+  for (const field of ["quality", "governance", "baseline", "deployment", "ci"]) {
     assert.ok(field in parsed.dimensions, `expected ${field} dimension`);
   }
   assert.equal(parsed.dimensions.baseline.comparisonResolvedCommit, git(root, ["rev-parse", "HEAD"]));
@@ -319,6 +344,7 @@ test("has stable parseable JSON, a compact scorecard, and strict CLI validation"
   assert.match(human.stdout, /GOVERNANCE\s+PASS/);
   assert.match(human.stdout, /BASELINE\s+PASS \(MATCH\)/);
   assert.match(human.stdout, /DEPLOYMENT\s+NOT_CONFIGURED/);
+  assert.match(human.stdout, /CI\s+NOT_CONFIGURED/);
   assert.match(formatRepositoryStatus(parsed), /Overall: WARN/);
   assert.equal(missingBaseline.status, 1);
   assert.match(missingBaseline.stderr, /compare-ref/);
@@ -335,7 +361,9 @@ test("direct deployment commits produce MATCH, MISMATCH, and UNVERIFIED status w
   assert.equal(match.deploymentConfigured, true);
   assert.equal(match.dimensions.deployment.deploymentStatus, "MATCH");
   assert.equal(match.dimensions.deployment.status, "PASS");
-  assert.equal(match.overallStatus, "PASS");
+  assert.equal(match.ciConfigured, false);
+  assert.equal(match.dimensions.ci.status, "NOT_CONFIGURED");
+  assert.equal(match.overallStatus, "WARN");
 
   const mismatchFixture = createWebapp();
   assert.ok(mismatchFixture.initial);
@@ -380,7 +408,7 @@ test("runtime evidence files retain trust metadata and optional environment with
   assert.equal(authenticatedEvidence.collectedAt, "2026-09-03T00:00:00Z");
   assert.equal(authenticatedEvidence.runtime.name, "runtime-a");
   assert.equal(authenticatedEvidence.runtime.environment, "example-production");
-  assert.equal(authenticated.overallStatus, "PASS");
+  assert.equal(authenticated.overallStatus, "WARN");
 
   const noEnvironmentFile = writeEvidenceFile(runtimeEvidence(initial, { environment: null }));
   const noEnvironment = inspectRepositoryStatus(root, {
@@ -470,7 +498,7 @@ test("evidence file input is read only and direct callers cannot forge runtime p
   assert.equal(forgedEvidence.authenticated, false);
 });
 
-test("repository status preserves fresh runtime evidence as full PASS", () => {
+test("fresh runtime evidence keeps deployment PASS while CI remains a readiness warning", () => {
   const { root, initial } = createWebapp();
   assert.ok(initial);
   const file = writeEvidenceFile(runtimeEvidence(initial));
@@ -485,7 +513,8 @@ test("repository status preserves fresh runtime evidence as full PASS", () => {
   assert.equal(report.dimensions.deployment.freshness.status, "FRESH");
   assert.equal(report.dimensions.deployment.freshness.ageSeconds, 3600);
   assert.equal(report.dimensions.deployment.status, "PASS");
-  assert.equal(report.overallStatus, "PASS");
+  assert.equal(report.dimensions.ci.status, "NOT_CONFIGURED");
+  assert.equal(report.overallStatus, "WARN");
   assert.match(formatRepositoryStatus(report), /DEPLOYMENT\s+PASS \(MATCH; FRESH\)/);
 });
 
@@ -560,7 +589,7 @@ test("repository status freshness policy is explicit and evidence-file only", ()
   }), /requires Runtime Evidence file/);
 });
 
-test("repository status preserves matching runtime identity as full PASS", () => {
+test("matching runtime identity preserves deployment PASS while CI remains unconfigured", () => {
   const { root, initial } = createWebapp();
   assert.ok(initial);
   const file = writeEvidenceFile(runtimeEvidence(initial));
@@ -574,7 +603,8 @@ test("repository status preserves matching runtime identity as full PASS", () =>
   assert.equal(report.dimensions.deployment.deploymentStatus, "MATCH");
   assert.equal(report.dimensions.deployment.runtimeIdentity?.status, "MATCH");
   assert.equal(report.dimensions.deployment.status, "PASS");
-  assert.equal(report.overallStatus, "PASS");
+  assert.equal(report.dimensions.ci.status, "NOT_CONFIGURED");
+  assert.equal(report.overallStatus, "WARN");
   assert.match(formatRepositoryStatus(report), /DEPLOYMENT\s+PASS \(MATCH; IDENTITY_MATCH\)/);
 });
 
@@ -642,8 +672,161 @@ test("freshness and runtime identity compose in repository status", () => {
   });
   assert.equal(report.dimensions.deployment.freshness?.status, "FRESH");
   assert.equal(report.dimensions.deployment.runtimeIdentity?.status, "MATCH");
-  assert.equal(report.overallStatus, "PASS");
+  assert.equal(report.dimensions.ci.status, "NOT_CONFIGURED");
+  assert.equal(report.overallStatus, "WARN");
   assert.match(formatRepositoryStatus(report), /MATCH; FRESH; IDENTITY_MATCH/);
+});
+
+test("matching CI evidence completes repository readiness", () => {
+  const { root, initial } = createWebapp();
+  assert.ok(initial);
+  const ciFile = writeCiEvidenceFile(ciEvidence(initial));
+  const report = inspectRepositoryStatus(root, {
+    expectedRef: "main",
+    deployedCommit: initial,
+    ciEvidenceFile: ciFile,
+    ciExpectedCommit: initial,
+    requiredCiChecks: ["typecheck", "test", "lint", "build"],
+  });
+
+  assert.equal(report.ciConfigured, true);
+  assert.equal(report.dimensions.ci.status, "PASS");
+  assert.equal(report.dimensions.ci.commitStatus, "MATCH");
+  assert.equal(report.dimensions.ci.checksStatus, "PASS");
+  assert.equal(report.technicalStatus, "PASS");
+  assert.equal(report.overallStatus, "PASS");
+  assert.match(formatRepositoryStatus(report), /CI\s+PASS \(MATCH; PASS\)/);
+});
+
+test("CI commit mismatch remains a non-technical repository warning", () => {
+  const { root, initial } = createWebapp();
+  assert.ok(initial);
+  const different = "89abcdef0123456789abcdef0123456789abcdef";
+  const report = inspectRepositoryStatus(root, {
+    expectedRef: "main",
+    deployedCommit: initial,
+    ciEvidenceFile: writeCiEvidenceFile(ciEvidence(different)),
+    ciExpectedCommit: initial,
+    requiredCiChecks: ["typecheck", "test"],
+  });  assert.equal(report.dimensions.deployment.status, "PASS");
+  assert.equal(report.dimensions.ci.commitStatus, "MISMATCH");
+  assert.equal(report.dimensions.ci.checksStatus, "PASS");
+  assert.equal(report.dimensions.ci.status, "WARN");
+  assert.equal(report.technicalStatus, "PASS");
+  assert.equal(report.overallStatus, "WARN");
+});
+
+test("failed required CI check is blocking without becoming a technical failure", () => {
+  const { root, initial } = createWebapp();
+  assert.ok(initial);
+  const evidence = ciEvidence(initial);
+  evidence.checks[1].status = "FAIL";
+  const report = inspectRepositoryStatus(root, {
+    expectedRef: "main",
+    deployedCommit: initial,
+    ciEvidenceFile: writeCiEvidenceFile(evidence),
+    ciExpectedCommit: initial,
+    requiredCiChecks: ["typecheck", "test"],
+  });
+
+  assert.equal(report.dimensions.ci.checksStatus, "FAIL");
+  assert.equal(report.dimensions.ci.status, "FAIL");
+  assert.equal(report.technicalStatus, "PASS");
+  assert.equal(report.overallStatus, "FAIL");
+});
+
+test("skipped and missing required CI checks are readiness warnings", () => {
+  const { root, initial } = createWebapp();
+  assert.ok(initial);
+  const skippedEvidence = ciEvidence(initial);
+  skippedEvidence.checks[1].status = "SKIPPED";
+  const skipped = inspectRepositoryStatus(root, {
+    expectedRef: "main",
+    deployedCommit: initial,
+    ciEvidenceFile: writeCiEvidenceFile(skippedEvidence),
+    ciExpectedCommit: initial,
+    requiredCiChecks: ["typecheck", "test"],
+  });  assert.equal(skipped.dimensions.ci.checksStatus, "UNVERIFIED");
+  assert.equal(skipped.dimensions.ci.status, "WARN");
+  assert.equal(skipped.overallStatus, "WARN");
+
+  const missing = inspectRepositoryStatus(root, {
+    expectedRef: "main",
+    deployedCommit: initial,
+    ciEvidenceFile: writeCiEvidenceFile(ciEvidence(initial)),
+    ciExpectedCommit: initial,
+    requiredCiChecks: ["typecheck", "security"],
+  });
+  assert.equal(missing.dimensions.ci.checksStatus, "UNVERIFIED");
+  assert.equal(missing.dimensions.ci.requiredChecks[1]?.status, "MISSING");
+  assert.equal(missing.dimensions.ci.status, "WARN");
+  assert.equal(missing.overallStatus, "WARN");
+});
+
+test("non-required CI failures do not block repository readiness", () => {
+  const { root, initial } = createWebapp();
+  assert.ok(initial);
+  const evidence = ciEvidence(initial);
+  evidence.checks.push({ name: "optional-security", status: "FAIL" });
+  const report = inspectRepositoryStatus(root, {
+    expectedRef: "main",
+    deployedCommit: initial,
+    ciEvidenceFile: writeCiEvidenceFile(evidence),
+    ciExpectedCommit: initial,
+    requiredCiChecks: ["typecheck", "test", "lint", "build"],
+  });
+  assert.equal(report.dimensions.ci.status, "PASS");
+  assert.equal(report.overallStatus, "PASS");
+});
+
+test("repository CI configuration is explicit, complete, unique, and read only", () => {
+  const { root, initial } = createWebapp();
+  assert.ok(initial);
+  const file = writeCiEvidenceFile(ciEvidence(initial));
+  const before = fs.readFileSync(file, "utf8");  const valid = runCli(
+    root,
+    "--expected-ref", "main",
+    "--deployed-commit", initial,
+    "--ci-evidence-file", file,
+    "--ci-expected-commit", initial,
+    "--require-ci-check", "typecheck",
+    "--require-ci-check", "test",
+    "--json",
+  );
+  assert.equal(valid.status, 0);
+  assert.equal(JSON.parse(valid.stdout).dimensions.ci.status, "PASS");
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+
+  for (const args of [
+    [root, "--ci-evidence-file", file],
+    [root, "--ci-expected-commit", initial],
+    [root, "--require-ci-check", "test"],
+    [root, "--ci-evidence-file", file, "--ci-expected-commit", "HEAD", "--require-ci-check", "test"],
+    [root, "--ci-evidence-file", file, "--ci-expected-commit", initial],
+    [root, "--ci-evidence-file", file, "--ci-expected-commit", initial, "--require-ci-check", "test", "--require-ci-check", " test "],
+  ]) {
+    assert.equal(runCli(...args).status, 1, args.join(" "));
+  }
+
+  assert.throws(() => inspectRepositoryStatus(root, {
+    ciEvidenceFile: file,
+    ciExpectedCommit: initial,
+  }), /requires ciEvidenceFile, ciExpectedCommit, and at least one requiredCiCheck/);
+});
+
+test("invalid CI evidence file is a repository input failure", () => {
+  const { root, initial } = createWebapp();
+  assert.ok(initial);
+  const invalid = ciEvidence(initial);
+  invalid.checks[0].status = "SUCCESS";
+  const invalidFile = writeCiEvidenceFile(invalid);
+
+  assert.throws(() => inspectRepositoryStatus(root, {
+    ciEvidenceFile: invalidFile,
+    ciExpectedCommit: initial,
+    requiredCiChecks: ["typecheck"],
+  }), /CI evidence does not satisfy/);
+  assert.equal(runCli(root, "--ci-evidence-file", invalidFile, "--ci-expected-commit", initial, "--require-ci-check", "typecheck").status, 1);
 });
 
 test("configured deployment technical failure propagates to repository technical failure", () => {
@@ -659,14 +842,16 @@ test("configured deployment technical failure propagates to repository technical
   assert.equal(report.overallStatus, "FAIL");
 });
 
-test("repository status delegates deployment validation and comparison to canonical deployment verification", () => {
+test("repository status delegates deployment and CI validation to canonical verifiers", () => {
   const source = fs.readFileSync(path.resolve("scripts/audit-repository-status.js"), "utf8");
   assert.match(source, /inspectDeploymentVerification/);
   assert.match(source, /inspectDeploymentVerificationFromEvidenceFile/);
   assert.match(source, /isFullObjectId/);
   assert.match(source, /validateEvidenceFreshnessPolicy/);
   assert.match(source, /validateRuntimeIdentityPolicy/);
+  assert.match(source, /inspectCiVerificationFromFile/);
   assert.doesNotMatch(source, /validateRuntimeEvidence/);
+  assert.doesNotMatch(source, /validateCiEvidence/);
   assert.doesNotMatch(source, /[0-9a-fA-F]\{40\}/);
   assert.doesNotMatch(source, /spawnSync|execFileSync|fetch\(|https?:|ssh|systemctl|docker|process\.env|Date\.now|writeFile/);
 });
