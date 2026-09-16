@@ -589,3 +589,37 @@ bun run api:contract --file ./candidate-api.json
 bun run api:contract:openapi --file ./openapi.json --kind candidate --service example-api --source local-openapi --collected-at 2026-09-16T13:45:00Z --json
 bun run audit:api-contract --baseline-file ./baseline-api.json --candidate-file ./candidate-api.json
 ```
+
+### Cross-repository contract version audit
+
+`bun run contract:inventory` validates Contract Inventory v1 for one repository. An inventory contains only a portable repository identifier plus explicit contract ids and version tokens. It does not contain business rules or infer contracts from code. `bun run audit:cross-contracts` evaluates multiple inventories against an explicit Cross Repository Contract Policy v1.
+
+A policy requirement names at least two repositories and a contract id. It may specify `expectedVersion`; when it does, every named repository must explicitly declare that exact version. When `expectedVersion` is omitted, the toolkit performs consensus-only drift detection and requires the named repositories to agree. It never chooses a canonical repository or decides which differing version is correct. Missing inventories, missing required contract declarations, explicit version mismatches, and consensus drift are blocking `FAIL`. Unreferenced repositories and contracts do not affect policy truth.
+
+```json
+{
+  "version": 1,
+  "requirements": [
+    {
+      "contractId": "room-types",
+      "repositories": ["pulse", "hills", "travel"],
+      "expectedVersion": "v12"
+    },
+    {
+      "contractId": "payment/account-routing",
+      "repositories": ["hills", "travel"]
+    }
+  ]
+}
+```
+
+```sh
+bun run contract:inventory --file ./hills-contracts.json
+bun run audit:cross-contracts \
+  --policy /private/path/cross-contract-policy.json \
+  --inventory-file ./pulse-contracts.json \
+  --inventory-file ./hills-contracts.json \
+  --inventory-file ./travel-contracts.json
+```
+
+Both commands are offline and read only. Policy and inventory files are explicit caller inputs; the public toolkit contains no Happinezz-specific contract ids, versions, canonical ownership, or private organization rules.
