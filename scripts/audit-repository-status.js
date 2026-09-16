@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { inspectProfiledRepository } from "./audit-profiled-repository.js";
 import { inspectGitGovernance } from "./audit-git-governance.js";
 import { inspectProductionBaseline } from "./audit-production-baseline.js";
+import { inspectCiVerificationFromFile } from "./audit-ci-verification.js";
 import {
   inspectDeploymentVerification,
   inspectDeploymentVerificationFromEvidenceFile,
@@ -14,7 +15,7 @@ import {
   validateRuntimeIdentityPolicy,
 } from "./audit-deployment-verification.js";
 
-/** @typedef {{ expectedRef?: string | null, expectedCommit?: string | null, compareRef?: string | null, deployedCommit?: string | null, evidenceFile?: string | null, maxEvidenceAgeSeconds?: number | null, evaluatedAt?: string | null, expectedRuntimeName?: string | null, expectedRuntimeEnvironment?: string | null }} StatusOptions */
+/** @typedef {{ expectedRef?: string | null, expectedCommit?: string | null, compareRef?: string | null, deployedCommit?: string | null, evidenceFile?: string | null, maxEvidenceAgeSeconds?: number | null, evaluatedAt?: string | null, expectedRuntimeName?: string | null, expectedRuntimeEnvironment?: string | null, ciEvidenceFile?: string | null, ciExpectedCommit?: string | null, requiredCiChecks?: string[] | null }} StatusOptions */
 
 /** @param {unknown} error */
 function errorDetail(error) {
@@ -189,6 +190,52 @@ function notConfiguredDeployment() {
   };
 }
 
+/** @param {import("./audit-ci-verification.js").CiVerificationReport} report */
+function ciDimension(report) {
+  return {
+    configured: true,
+    status: report.overallStatus,
+    technicalStatus: report.technicalStatus,
+    overallStatus: report.overallStatus,
+    commitStatus: report.commitStatus,
+    checksStatus: report.checksStatus,
+    expectedCommit: report.expectedCommit,
+    evidenceCommit: report.evidenceCommit,
+    requiredChecks: report.requiredChecks,
+    evidence: report.evidence,
+  };
+}
+
+function notConfiguredCi() {
+  return {
+    configured: false,
+    status: "NOT_CONFIGURED",
+    technicalStatus: "PASS",
+    overallStatus: null,
+    commitStatus: null,
+    checksStatus: null,
+    expectedCommit: null,
+    evidenceCommit: null,
+    requiredChecks: [],
+    evidence: null,
+  };
+}
+
+/** @param {StatusOptions} options */
+function inspectCi(options) {
+  const result = inspectCiVerificationFromFile({
+    evidenceFile: /** @type {string} */ (options.ciEvidenceFile),
+    expectedCommit: /** @type {string} */ (options.ciExpectedCommit),
+    requiredChecks: /** @type {string[]} */ (options.requiredCiChecks),
+  });
+  if (!result.ok) {
+    const error = new Error(result.error.detail);
+    error.name = "CiEvidenceInputError";
+    throw error;
+  }
+  return ciDimension(result.report);
+}
+
 /** @param {string} target @param {StatusOptions} options */
 function inspectDeployment(target, options) {
   if (options.evidenceFile) {
@@ -233,6 +280,11 @@ export function inspectRepositoryStatus(target, options = {}) {
   const governance = inspectGovernance(root);
   const baselineConfigured = Boolean(options.expectedRef || options.expectedCommit);
   const deploymentConfigured = Boolean(options.deployedCommit || options.evidenceFile);
+  const ciConfigured = Boolean(
+    options.ciEvidenceFile ||
+    options.ciExpectedCommit ||
+    (Array.isArray(options.requiredCiChecks) && options.requiredCiChecks.length > 0)
+  );
   if (options.deployedCommit && options.evidenceFile) {
     throw new Error("deployment evidence inputs are mutually exclusive");
   }
@@ -255,6 +307,14 @@ export function inspectRepositoryStatus(target, options = {}) {
   if (runtimeIdentityPolicy.policy !== null && !options.evidenceFile) {
     throw new Error("runtime identity policy requires Runtime Evidence file input");
   }
+  if (ciConfigured) {
+    if (!options.ciEvidenceFile || !options.ciExpectedCommit || !Array.isArray(options.requiredCiChecks) || options.requiredCiChecks.length === 0) {
+      throw new Error("CI verification requires ciEvidenceFile, ciExpectedCommit, and at least one requiredCiCheck");
+    }
+    if (!isFullObjectId(options.ciExpectedCommit)) {
+      throw new Error("ciExpectedCommit must be a full 40- or 64-character hexadecimal Git object ID");
+    }
+  }
 
   const baseline = baselineConfigured
     ? inspectBaseline(root, options)
@@ -262,12 +322,16 @@ export function inspectRepositoryStatus(target, options = {}) {
   const deployment = deploymentConfigured
     ? inspectDeployment(root, options)
     : notConfiguredDeployment();
+  const ci = ciConfigured
+    ? inspectCi(options)
+    : notConfiguredCi();
 
   const technicalStatus =
     quality.technicalStatus === "FAIL" ||
     governance.technicalStatus === "FAIL" ||
     (baseline.configured && baseline.technicalStatus === "FAIL") ||
-    (deployment.configured && deployment.technicalStatus === "FAIL")
+    (deployment.configured && deployment.technicalStatus === "FAIL") ||
+    (ci.configured && ci.technicalStatus === "FAIL")
       ? "FAIL"
       : "PASS";
 
@@ -275,13 +339,16 @@ export function inspectRepositoryStatus(target, options = {}) {
     quality.status === "FAIL" ||
     governance.status === "FAIL" ||
     (baseline.configured && baseline.technicalStatus === "FAIL") ||
-    (deployment.configured && deployment.technicalStatus === "FAIL")
+    (deployment.configured && deployment.technicalStatus === "FAIL") ||
+    (ci.configured && (ci.technicalStatus === "FAIL" || ci.status === "FAIL"))
       ? "FAIL"
       : governance.status === "WARN" ||
           !baseline.configured ||
           baseline.overallStatus === "WARN" ||
           !deployment.configured ||
-          deployment.overallStatus === "WARN"
+          deployment.overallStatus === "WARN" ||
+          !ci.configured ||
+          ci.overallStatus === "WARN"
         ? "WARN"
         : "PASS";
 
@@ -290,7 +357,8 @@ export function inspectRepositoryStatus(target, options = {}) {
     profile: quality.profile,
     baselineConfigured: baseline.configured,
     deploymentConfigured: deployment.configured,
-    dimensions: { quality, governance, baseline, deployment },
+    ciConfigured: ci.configured,
+    dimensions: { quality, governance, baseline, deployment, ci },
     technicalStatus,
     overallStatus,
     summary: {
@@ -298,13 +366,14 @@ export function inspectRepositoryStatus(target, options = {}) {
       governance: governance.status,
       baseline: baseline.status,
       deployment: deployment.status,
+      ci: ci.status,
     },
   };
 }
 
 /** @param {ReturnType<typeof inspectRepositoryStatus>} report */
 export function formatRepositoryStatus(report) {
-  const { quality, governance, baseline, deployment } = report.dimensions;
+  const { quality, governance, baseline, deployment, ci } = report.dimensions;
   const baselineLabel = baseline.configured
     ? `${baseline.status} (${baseline.baselineStatus})`
     : baseline.status;
@@ -317,6 +386,9 @@ export function formatRepositoryStatus(report) {
   const deploymentLabel = deployment.configured
     ? `${deployment.status} (${deployment.deploymentStatus}${freshnessLabel}${identityLabel})`
     : deployment.status;
+  const ciLabel = ci.configured
+    ? `${ci.status} (${ci.commitStatus}; ${ci.checksStatus})`
+    : ci.status;
 
   return [
     `Repository status: ${report.root}`,
@@ -325,13 +397,14 @@ export function formatRepositoryStatus(report) {
     `GOVERNANCE  ${governance.status}`,
     `BASELINE    ${baselineLabel}`,
     `DEPLOYMENT  ${deploymentLabel}`,
+    `CI          ${ciLabel}`,
     "",
     `Technical: ${report.technicalStatus}`,
     `Overall: ${report.overallStatus}`,
   ].join("\n");
 }
 
-/** @typedef {{ expectedRef: string | null, expectedCommit: string | null, compareRef: string | null, deployedCommit: string | null, evidenceFile: string | null, maxEvidenceAgeSeconds: number | null, evaluatedAt: string | null, expectedRuntimeName: string | null, expectedRuntimeEnvironment: string | null, json: boolean, target: string | null }} CliArguments */
+/** @typedef {{ expectedRef: string | null, expectedCommit: string | null, compareRef: string | null, deployedCommit: string | null, evidenceFile: string | null, maxEvidenceAgeSeconds: number | null, evaluatedAt: string | null, expectedRuntimeName: string | null, expectedRuntimeEnvironment: string | null, ciEvidenceFile: string | null, ciExpectedCommit: string | null, requiredCiChecks: string[], json: boolean, target: string | null }} CliArguments */
 /** @param {string[]} argv @returns {CliArguments | null} */
 export function parseArguments(argv) {
   /** @type {CliArguments} */
@@ -345,6 +418,9 @@ export function parseArguments(argv) {
     evaluatedAt: null,
     expectedRuntimeName: null,
     expectedRuntimeEnvironment: null,
+    ciEvidenceFile: null,
+    ciExpectedCommit: null,
+    requiredCiChecks: [],
     json: false,
     target: null,
   };
@@ -364,7 +440,10 @@ export function parseArguments(argv) {
       argument === "--max-evidence-age-seconds" ||
       argument === "--evaluated-at" ||
       argument === "--expected-runtime-name" ||
-      argument === "--expected-runtime-environment"
+      argument === "--expected-runtime-environment" ||
+      argument === "--ci-evidence-file" ||
+      argument === "--ci-expected-commit" ||
+      argument === "--require-ci-check"
     ) {
       const value = argv[index + 1];
       if (typeof value !== "string" || !value || value.startsWith("--")) return null;
@@ -383,6 +462,15 @@ export function parseArguments(argv) {
       if (argument === "--evaluated-at") options.evaluatedAt = value;
       if (argument === "--expected-runtime-name") options.expectedRuntimeName = value;
       if (argument === "--expected-runtime-environment") options.expectedRuntimeEnvironment = value;
+      if (argument === "--ci-evidence-file") {
+        if (options.ciEvidenceFile !== null) return null;
+        options.ciEvidenceFile = value;
+      }
+      if (argument === "--ci-expected-commit") {
+        if (options.ciExpectedCommit !== null) return null;
+        options.ciExpectedCommit = value;
+      }
+      if (argument === "--require-ci-check") options.requiredCiChecks.push(value);
       index += 1;
     } else if (argument.startsWith("-")) {
       return null;
@@ -411,6 +499,14 @@ export function parseArguments(argv) {
   );
   if (!runtimeIdentityPolicy.ok) return null;
   if (runtimeIdentityPolicy.policy !== null && options.evidenceFile === null) return null;
+  const anyCi = options.ciEvidenceFile !== null || options.ciExpectedCommit !== null || options.requiredCiChecks.length > 0;
+  if (anyCi) {
+    if (options.ciEvidenceFile === null || options.ciExpectedCommit === null || options.requiredCiChecks.length === 0) return null;
+    if (!isFullObjectId(options.ciExpectedCommit)) return null;
+    const normalized = options.requiredCiChecks.map((name) => name.trim());
+    if (normalized.some((name) => name.length === 0) || new Set(normalized).size !== normalized.length) return null;
+    options.requiredCiChecks = normalized;
+  }
   return options;
 }
 
@@ -418,7 +514,7 @@ export function main(argv = process.argv.slice(2)) {
   const options = parseArguments(argv);
   if (!options) {
     console.error(
-      "Usage: node scripts/audit-repository-status.js [repository] [--expected-ref <git-ref> | --expected-commit <commit>] [--compare-ref <git-ref>] [--deployed-commit <40-or-64-hex-object-id> | --evidence-file <runtime-evidence.json> [--max-evidence-age-seconds <seconds> --evaluated-at <absolute-iso-timestamp>] [--expected-runtime-name <name> [--expected-runtime-environment <environment>]]] [--json]",
+      "Usage: node scripts/audit-repository-status.js [repository] [--expected-ref <git-ref> | --expected-commit <commit>] [--compare-ref <git-ref>] [--deployed-commit <40-or-64-hex-object-id> | --evidence-file <runtime-evidence.json> [--max-evidence-age-seconds <seconds> --evaluated-at <absolute-iso-timestamp>] [--expected-runtime-name <name> [--expected-runtime-environment <environment>]]] [--ci-evidence-file <ci-evidence.json> --ci-expected-commit <full-object-id> --require-ci-check <name> ...] [--json]",
     );
     return 1;
   }

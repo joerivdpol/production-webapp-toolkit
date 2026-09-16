@@ -173,11 +173,11 @@ Both commands are offline and read only. They read only the explicitly supplied 
 
 ## Repository status
 
-`bun run audit:repository-status /path/to/repository` combines the existing profiled quality, offline Git-governance, optional production-baseline, and optional deployment-verification audits into one read-only scorecard. It composes their canonical results rather than reimplementing their rules or inferring production truth.
+`bun run audit:repository-status /path/to/repository` combines the existing profiled quality, offline Git-governance, optional production-baseline, optional deployment-verification, and optional CI-verification audits into one read-only scorecard. It composes their canonical results rather than reimplementing their rules or inferring production truth.
 
-The scorecard has four dimensions: `QUALITY`, `GOVERNANCE`, `BASELINE`, and `DEPLOYMENT`. `QUALITY` passes only when the detected webapp or Python-service profile passes its required core checks. `GOVERNANCE` preserves the Git governance audit result. `BASELINE` runs only when `--expected-ref <git-ref>` and/or `--expected-commit <commit>` is explicitly supplied. `DEPLOYMENT` runs only when a baseline is explicit and exactly one deployment evidence input is supplied.
+The scorecard has five dimensions: `QUALITY`, `GOVERNANCE`, `BASELINE`, `DEPLOYMENT`, and `CI`. `QUALITY` passes only when the detected webapp or Python-service profile passes its required core checks. `GOVERNANCE` preserves the Git governance audit result. `BASELINE` runs only when `--expected-ref <git-ref>` and/or `--expected-commit <commit>` is explicitly supplied. `DEPLOYMENT` runs only when a baseline is explicit and exactly one deployment evidence input is supplied. `CI` runs only when an explicit CI evidence file, an explicit expected commit, and at least one explicit required check are all supplied. The CI expected commit is never inferred from the baseline, deployment, `HEAD`, or a branch.
 
-Without an explicit baseline selector, JSON reports `baselineConfigured: false` and the scorecard shows `BASELINE NOT_CONFIGURED`. Without deployment evidence, JSON reports `deploymentConfigured: false` and the scorecard shows `DEPLOYMENT NOT_CONFIGURED`. Either unconfigured dimension is a readiness warning rather than a technical defect, so a fully passing repository status now requires both an explicit matching baseline and an explicit matching deployment.
+Without an explicit baseline selector, JSON reports `baselineConfigured: false` and the scorecard shows `BASELINE NOT_CONFIGURED`. Without deployment evidence, JSON reports `deploymentConfigured: false` and the scorecard shows `DEPLOYMENT NOT_CONFIGURED`. Without CI verification input, JSON reports `ciConfigured: false` and the scorecard shows `CI NOT_CONFIGURED`. An unconfigured readiness dimension is a warning rather than a technical defect, so a fully passing repository status requires explicit matching baseline and deployment evidence plus passing CI evidence for the explicitly selected CI commit and checks.
 
 Use a direct deployed object ID:
 
@@ -200,17 +200,35 @@ bun run audit:repository-status /path/to/repository \
 ```
 `--deployed-commit` and `--evidence-file` are mutually exclusive. Deployment evidence without an explicit baseline is rejected. Direct commits use the canonical full-object-ID validator; evidence files use the canonical Runtime Evidence Contract validator and deployment comparison adapter. Missing, unreadable, malformed, or schema-invalid evidence files are CLI input failures with exit 1 and never fall back to another commit source.
 
+Configure CI independently and explicitly when repository readiness should include actual CI results:
+
+```sh
+bun run audit:repository-status /path/to/repository \
+  --expected-ref origin/production/example \
+  --deployed-commit 0123456789abcdef0123456789abcdef01234567 \
+  --ci-evidence-file ./ci-evidence.json \
+  --ci-expected-commit 0123456789abcdef0123456789abcdef01234567 \
+  --require-ci-check typecheck \
+  --require-ci-check test \
+  --require-ci-check lint \
+  --require-ci-check build
+```
+
+CI configuration is all-or-nothing: `--ci-evidence-file`, `--ci-expected-commit`, and at least one `--require-ci-check` must be supplied together. Required check names are trimmed, unique, exact, and case-sensitive. A matching CI commit with all required checks `PASS` makes the CI dimension `PASS`; commit mismatch or required `SKIPPED`/missing checks make it `WARN`; an explicit required `FAIL` makes the CI dimension and repository overall status `FAIL` without being classified as a technical inspection failure.
+
 The deployment dimension retains canonical trust metadata in JSON, including `deployedCommit`, `deploymentStatus`, `technicalStatus`, `evidence.type`, `source`, `authenticated`, and, for runtime evidence, `collectedAt` plus runtime name and optional environment. It also preserves the canonical `freshness` and `runtimeIdentity` reports. Freshness and runtime identity policies are accepted only with `evidenceFile`. Stale, future, or identity-mismatched evidence renders the deployment dimension as `WARN` while preserving `deploymentStatus: "MATCH"`. `authenticated: true` remains metadata and does not alter deployment status.
 
-The top-level JSON keeps the existing `root`, `profile`, `baselineConfigured`, `dimensions`, `technicalStatus`, `overallStatus`, and `summary` fields and adds `deploymentConfigured` plus `dimensions.deployment` and `summary.deployment`.
+The top-level JSON keeps `root`, `profile`, `baselineConfigured`, `deploymentConfigured`, `dimensions`, `technicalStatus`, `overallStatus`, and `summary`, and adds `ciConfigured`, `dimensions.ci`, and `summary.ci`. The CI dimension retains the canonical commit status, required-check status, required check results, provider metadata, and trust metadata from CI verification.
 
-`WARN` is not a technical failure. Governance warnings, an unconfigured baseline, an unconfigured deployment, baseline `MISMATCH` or `UNVERIFIED`, deployment `MISMATCH` or `UNVERIFIED`, configured freshness states `STALE` or `FUTURE`, and configured runtime identity `MISMATCH` exit 0. Quality failure or a technical audit failure produces overall `FAIL` and exit 1. Runtime evidence never selects the production baseline; only explicit baseline selectors do that.
+`WARN` is not a technical failure. Governance warnings, an unconfigured baseline, deployment, or CI dimension, baseline `MISMATCH` or `UNVERIFIED`, deployment `MISMATCH` or `UNVERIFIED`, configured freshness states `STALE` or `FUTURE`, configured runtime identity `MISMATCH`, CI commit mismatch, and required CI `SKIPPED`/missing states exit 0. Quality failure, an explicit required CI `FAIL`, or a technical audit failure produces overall `FAIL` and exit 1. Runtime evidence never selects the production baseline, and CI evidence never selects the expected CI commit.
 
-The repository-status layer adds no network access, runtime probing, target-repository writes, Git mutation, or production inference. Evidence-file mode reads only the requested evidence document through the deployment-verification adapter.
+The repository-status layer adds no network access, runtime probing, target-repository writes, Git mutation, or production inference. Runtime evidence is read only through the deployment-verification adapter and CI evidence is read only through the CI-verification adapter.
 
 ## Ecosystem status
 
-`bun run audit:ecosystem-status` aggregates the canonical repository-status report for several repositories. It does not add QUALITY, GOVERNANCE, BASELINE, or DEPLOYMENT rules, choose a branch, or infer a production baseline from `main`, remote `HEAD`, or governance production candidates.
+`bun run audit:ecosystem-status` aggregates the canonical repository-status report for several repositories. It does not add QUALITY, GOVERNANCE, BASELINE, DEPLOYMENT, or CI rules, choose a branch, or infer a production baseline from `main`, remote `HEAD`, or governance production candidates.
+
+The current ecosystem configuration contract does not yet accept CI evidence. Repository status therefore contributes `CI NOT_CONFIGURED`, so a repository with matching deployment evidence remains overall `WARN` until the next ecosystem CI integration capability lands.
 
 Config mode can supply deployment evidence independently for each repository. A repository may use either `deployedCommit` with a full Git object ID or `evidenceFile` with a Runtime Evidence Contract v1 document. Deployment evidence requires an explicit `expectedRef` and/or `expectedCommit`; the two deployment inputs are mutually exclusive. Repositories without deployment evidence continue to report `DEPLOYMENT NOT_CONFIGURED` and contribute a readiness warning when their other dimensions pass.
 

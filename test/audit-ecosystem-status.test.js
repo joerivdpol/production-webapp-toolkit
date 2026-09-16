@@ -257,7 +257,7 @@ test("unsupported profiles fail quality and config entries retain independent se
   assert.equal(report.repositories[1]?.dimensions.baseline.expectedRef, "main");
 });
 
-test("configured direct deployments can make the ecosystem fully PASS", () => {
+test("matching deployments without CI remain ecosystem WARN", () => {
   const webapp = createWebapp();
   const python = createPythonService();
   assert.ok(webapp.initial);
@@ -270,7 +270,7 @@ test("configured direct deployments can make the ecosystem fully PASS", () => {
   const report = JSON.parse(result.stdout);
 
   assert.equal(result.status, 0);
-  assert.equal(report.overallStatus, "PASS");
+  assert.equal(report.overallStatus, "WARN");
   assert.deepEqual(report.repositories.map((repository) => repository.dimensions.deployment.deploymentStatus), ["MATCH", "MATCH"]);
   assert.deepEqual(report.summary.deployment, { pass: 2, warn: 0, fail: 0, notConfigured: 0 });
 });
@@ -301,7 +301,7 @@ test("runtime evidence paths are config-relative and retain canonical trust meta
   const evidence = report.repositories[0]?.dimensions.deployment.evidence;
 
   assert.equal(result.status, 0);
-  assert.equal(report.overallStatus, "PASS");
+  assert.equal(report.overallStatus, "WARN");
   assert.equal(report.repositories[0]?.dimensions.deployment.deploymentStatus, "MATCH");
   assert.equal(report.repositories[0]?.dimensions.deployment.freshness?.status, "FRESH");
   assert.equal(report.repositories[0]?.dimensions.deployment.runtimeIdentity?.status, "MATCH");
@@ -371,7 +371,7 @@ test("invalid runtime evidence is isolated to its repository while later reposit
 
   assert.equal(report.repositories[0]?.overallStatus, "FAIL");
   assert.equal(report.repositories[0]?.dimensions.deployment.status, "FAIL");
-  assert.equal(report.repositories[1]?.overallStatus, "PASS");
+  assert.equal(report.repositories[1]?.overallStatus, "WARN");
   assert.equal(report.repositories[1]?.dimensions.deployment.deploymentStatus, "MATCH");
   assert.deepEqual(report.summary.deployment, { pass: 1, warn: 0, fail: 1, notConfigured: 0 });
   assert.equal(report.overallStatus, "FAIL");
@@ -406,12 +406,12 @@ test("ecosystem freshness keeps fresh MATCH passing and stale MATCH warning", ()
 
   assert.deepEqual(report.repositories.map((repository) => repository.dimensions.deployment.deploymentStatus), ["MATCH", "MATCH"]);
   assert.deepEqual(report.repositories.map((repository) => repository.dimensions.deployment.freshness?.status), ["FRESH", "STALE"]);
-  assert.deepEqual(report.repositories.map((repository) => repository.overallStatus), ["PASS", "WARN"]);
+  assert.deepEqual(report.repositories.map((repository) => repository.overallStatus), ["WARN", "WARN"]);
   assert.deepEqual(report.summary.deployment, { pass: 1, warn: 1, fail: 0, notConfigured: 0 });
   assert.equal(report.technicalStatus, "PASS");
   assert.equal(report.overallStatus, "WARN");
   const rendered = formatEcosystemStatus(report);
-  assert.match(rendered, /fresh.*MATCH\/FRESH.*PASS/);
+  assert.match(rendered, /fresh.*MATCH\/FRESH.*WARN/);
   assert.match(rendered, /stale.*MATCH\/STALE.*WARN/);
 });
 
@@ -461,12 +461,12 @@ test("ecosystem runtime identity distinguishes matching and mismatching evidence
 
   assert.deepEqual(report.repositories.map((repository) => repository.dimensions.deployment.deploymentStatus), ["MATCH", "MATCH"]);
   assert.deepEqual(report.repositories.map((repository) => repository.dimensions.deployment.runtimeIdentity?.status), ["MATCH", "MISMATCH"]);
-  assert.deepEqual(report.repositories.map((repository) => repository.overallStatus), ["PASS", "WARN"]);
+  assert.deepEqual(report.repositories.map((repository) => repository.overallStatus), ["WARN", "WARN"]);
   assert.deepEqual(report.summary.deployment, { pass: 1, warn: 1, fail: 0, notConfigured: 0 });
   assert.equal(report.technicalStatus, "PASS");
   assert.equal(report.overallStatus, "WARN");
   const rendered = formatEcosystemStatus(report);
-  assert.match(rendered, /matching-runtime.*MATCH\/IDENTITY_MATCH.*PASS/);
+  assert.match(rendered, /matching-runtime.*MATCH\/IDENTITY_MATCH.*WARN/);
   assert.match(rendered, /wrong-runtime.*MATCH\/IDENTITY_MISMATCH.*WARN/);
 });
 
@@ -487,7 +487,7 @@ test("freshness and runtime identity compose in ecosystem status", () => {
   assert.equal(report.repositories[0]?.dimensions.deployment.deploymentStatus, "MATCH");
   assert.equal(report.repositories[0]?.dimensions.deployment.freshness?.status, "FRESH");
   assert.equal(report.repositories[0]?.dimensions.deployment.runtimeIdentity?.status, "MATCH");
-  assert.equal(report.repositories[0]?.overallStatus, "PASS");
+  assert.equal(report.repositories[0]?.overallStatus, "WARN");
   assert.match(formatEcosystemStatus(report), /MATCH\/FRESH\/IDENTITY_MATCH/);
 });
 
