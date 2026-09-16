@@ -1390,3 +1390,48 @@ bun run audit:route-coverage -- \
 ```
 
 The capability is local and read only. It does not infer framework routes, inspect test contents, execute tests, execute smoke probes, validate authorization implementation, read runtime environment values, or mutate repository or production state. Application-specific route ids and auth policy ids remain project configuration rather than public-toolkit business truth.
+
+### Authorization policy audit
+
+`bun run audit:authorization` performs a local, read-only structural authorization review for explicitly configured TypeScript/JavaScript admin routes and server endpoints. The policy names each protected surface, the server implementation files, the files where a server-side guard may be applied, and exact guard call names such as `requireRole` or `auth.authorize`. Admin-route surfaces must also bind to a route that is explicitly `policy`-classified in Route Inventory v1.
+
+Guard detection uses the TypeScript AST and counts real call expressions only. A guard name in a comment, string literal, or similarly named function does not satisfy the policy. Centralized middleware is supported by separating `serverFiles` from `guardFiles`, so an endpoint does not need to duplicate a guard call when policy explicitly points at the middleware that protects it.
+
+Optional client files and client authorization call names can be associated with a surface. When a configured client authorization call is structurally present but no configured server-side guard call is found, the audit emits a blocking `client-only-authorization` finding. A client check accompanied by server guard evidence is reported only as defense in depth.
+
+```json
+{
+  "version": 1,
+  "surfaces": [
+    {
+      "id": "admin-users-route",
+      "kind": "admin-route",
+      "routeId": "admin-users",
+      "serverFiles": ["src/server/admin-users.ts"],
+      "guardFiles": ["src/server/admin-users.ts"],
+      "guardCallees": ["requireRole"],
+      "clientFiles": ["src/admin/UsersPage.tsx"],
+      "clientAuthCallees": ["hasRole"]
+    },
+    {
+      "id": "account-api",
+      "kind": "server-endpoint",
+      "serverFiles": ["src/server/account.ts"],
+      "guardFiles": ["src/server/auth-middleware.ts"],
+      "guardCallees": ["auth.authorize"],
+      "clientFiles": [],
+      "clientAuthCallees": []
+    }
+  ]
+}
+```
+
+```sh
+bun run audit:authorization -- \
+  --root /path/to/repository \
+  --policy /private/path/authorization-policy.json \
+  --route-inventory ./routes.json \
+  --json
+```
+
+This is structural call-presence evidence, not a proof of authorization semantics or control-flow dominance. It can prove that configured server guard calls are absent or structurally present in explicit files; it does not prove that every runtime path passes through a guard or that a named guard enforces the correct role. Policy authors remain responsible for binding the correct guard functions and private authorization policy ids. Source files are bounded regular files, symbolic links are not followed, malformed source fails closed, source text is not copied into reports, and the audit performs no network calls, subprocess execution, runtime environment inspection, or repository mutation.
