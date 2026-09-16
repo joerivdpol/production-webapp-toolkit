@@ -136,6 +136,23 @@ test("rejects empty, mismatched, duplicate, incomplete, or unsupported jobs", ()
     if (!result.ok) assert.equal(result.error.id, id);
   }
 });
+test("accepts an explicit evidence source and rejects an empty source", () => {
+  const custom = buildGitHubActionsCiEvidence(runPayload(), jobsPayload(), {
+    collectedAt: "2026-09-16T07:34:00Z",
+    authenticated: true,
+    source: "github-cli-api",
+  });
+  assert.equal(custom.ok, true);
+  if (custom.ok) assert.equal(custom.evidence.evidence.source, "github-cli-api");
+
+  const invalid = buildGitHubActionsCiEvidence(runPayload(), jobsPayload(), {
+    collectedAt: "2026-09-16T07:34:00Z",
+    source: " ",
+  });
+  assert.equal(invalid.ok, false);
+  if (!invalid.ok) assert.equal(invalid.error.id, "github-source-invalid");
+});
+
 test("requires explicit collection time and boolean authentication metadata", () => {
   for (const options of [
     { collectedAt: "" },

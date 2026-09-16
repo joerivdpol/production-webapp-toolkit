@@ -37,7 +37,8 @@
     "test": "node --test",
     "typecheck": "tsc --noEmit",
     "release:verify": "bun run audit:safety . && bun run check && bun run build && bun run audit:release",
-    "ci:evidence:github-actions": "node scripts/github-actions-ci-evidence.js"
+    "ci:evidence:github-actions": "node scripts/github-actions-ci-evidence.js",
+    "ci:evidence:github-actions:collect": "node scripts/collect-github-actions-ci-evidence.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
