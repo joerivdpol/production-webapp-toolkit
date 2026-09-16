@@ -11,6 +11,8 @@ const HTTP_METHODS = ["get", "post", "put", "patch", "delete", "head", "options"
 const ANNOTATION_KEYS = new Set(["title", "description", "example", "examples", "deprecated"]);
 const CORE_SCHEMA_KEYS = new Set(["$ref", "type", "nullable", "enum", "properties", "required", "additionalProperties", "items"]);
 const NO_BODY_MEDIA_TYPE = "none";
+const PATH_ITEM_KEYS = new Set(["$ref", "summary", "description", "servers", "parameters", "additionalOperations", ...HTTP_METHODS]);
+const OPERATION_KEYS = new Set(["tags", "summary", "description", "externalDocs", "operationId", "parameters", "requestBody", "responses", "callbacks", "deprecated", "security", "servers"]);
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 function isPlainObject(value) {
@@ -236,6 +238,23 @@ function convertResponses(raw, document, minor) {
   return responses;
 }
 
+/** @param {string} operationPath @param {string} method @param {Record<string, unknown>} rawOperation @param {any[]} pathParameters @param {Record<string, unknown>} document @param {number} minor */
+function convertOperation(operationPath, method, rawOperation, pathParameters, document, minor) {
+  for (const key of Object.keys(rawOperation)) {
+    if (!OPERATION_KEYS.has(key) && !key.startsWith("x-")) throw new Error(`unsupported OpenAPI Operation field ${key}`);
+  }
+  if (rawOperation.security !== undefined) throw new Error(`operation security is outside API Contract Snapshot v1: ${method} ${operationPath}`);
+  if (rawOperation.callbacks !== undefined) throw new Error(`callbacks are outside API Contract Snapshot v1: ${method} ${operationPath}`);
+  const operationParameters = convertParameters(rawOperation.parameters, document, minor);
+  return {
+    method,
+    path: operationPath,
+    parameters: mergeParameters(pathParameters, operationParameters),
+    body: convertRequestBody(rawOperation.requestBody, document, minor),
+    responses: convertResponses(rawOperation.responses, document, minor),
+  };
+}
+
 /** @param {Record<string, unknown>} document @param {{kind:"baseline"|"candidate",service:string,source:string,authenticated:boolean,collectedAt:string}} metadata */
 export function openApiToSnapshot(document, metadata) {
   const version = openApiVersion(document.openapi);
@@ -246,7 +265,9 @@ export function openApiToSnapshot(document, metadata) {
   if (!service || !source || typeof metadata.authenticated !== "boolean" || !isAbsoluteIsoTimestamp(metadata.collectedAt)) {
     throw new Error("explicit service and valid evidence metadata are required");
   }
+  if (!isPlainObject(document.info)) throw new Error("OpenAPI info object is required");
   if (document.security !== undefined) throw new Error("document security requirements are outside API Contract Snapshot v1");
+  if (document.webhooks !== undefined && (!isPlainObject(document.webhooks) || Object.keys(document.webhooks).length > 0)) throw new Error("OpenAPI webhooks are outside API Contract Snapshot v1");
   if (!isPlainObject(document.paths) || Object.keys(document.paths).length === 0) throw new Error("OpenAPI paths must be a non-empty object");
 
   const operations = [];
@@ -255,21 +276,25 @@ export function openApiToSnapshot(document, metadata) {
     const pathItem = document.paths[operationPath];
     if (!isPlainObject(pathItem)) throw new Error(`OpenAPI path item ${operationPath} must be an object`);
     if (pathItem.$ref !== undefined) throw new Error("path-item $ref is outside the supported contract subset");
+    for (const key of Object.keys(pathItem)) {
+      if (!PATH_ITEM_KEYS.has(key) && !key.startsWith("x-")) throw new Error(`unsupported OpenAPI Path Item field ${key}`);
+    }
     const pathParameters = convertParameters(pathItem.parameters, document, version.minor);
     for (const method of HTTP_METHODS) {
       const rawOperation = pathItem[method];
       if (rawOperation === undefined) continue;
+      if (method === "query" && version.minor < 2) throw new Error("OpenAPI QUERY operations require OpenAPI 3.2+");
       if (!isPlainObject(rawOperation)) throw new Error(`OpenAPI operation ${method.toUpperCase()} ${operationPath} must be an object`);
-      if (rawOperation.security !== undefined) throw new Error(`operation security is outside API Contract Snapshot v1: ${method.toUpperCase()} ${operationPath}`);
-      if (rawOperation.callbacks !== undefined) throw new Error(`callbacks are outside API Contract Snapshot v1: ${method.toUpperCase()} ${operationPath}`);
-      const operationParameters = convertParameters(rawOperation.parameters, document, version.minor);
-      operations.push({
-        method: method.toUpperCase(),
-        path: operationPath,
-        parameters: mergeParameters(pathParameters, operationParameters),
-        body: convertRequestBody(rawOperation.requestBody, document, version.minor),
-        responses: convertResponses(rawOperation.responses, document, version.minor),
-      });
+      operations.push(convertOperation(operationPath, method.toUpperCase(), rawOperation, pathParameters, document, version.minor));
+    }
+    if (pathItem.additionalOperations !== undefined) {
+      if (version.minor < 2 || !isPlainObject(pathItem.additionalOperations)) throw new Error("additionalOperations require OpenAPI 3.2+");
+      for (const [methodName, rawOperation] of Object.entries(pathItem.additionalOperations)) {
+        const method = methodName.toUpperCase();
+        if (!/^[A-Z][A-Z0-9!#$%&'*+.^_`|~-]*$/.test(method) || HTTP_METHODS.includes(methodName.toLowerCase())) throw new Error(`invalid or duplicate additional operation method ${methodName}`);
+        if (!isPlainObject(rawOperation)) throw new Error(`OpenAPI operation ${method} ${operationPath} must be an object`);
+        operations.push(convertOperation(operationPath, method, rawOperation, pathParameters, document, version.minor));
+      }
     }
   }
   if (operations.length === 0) throw new Error("OpenAPI document contains no supported HTTP operations");

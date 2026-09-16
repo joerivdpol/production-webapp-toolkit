@@ -48,7 +48,7 @@ function baseDocument(version = "3.0.3") {
           required: ["id", "name"],
           properties: {
             id: { type: "string" },
-            name: { type: "string", nullable: true },
+            name: version.startsWith("3.0.") ? { type: "string", nullable: true } : { type: ["string", "null"] },
           },
         },
       },
@@ -204,4 +204,64 @@ test("OpenAPI adapter stays offline and read only", () => {
   assert.doesNotMatch(source, /node:child_process|spawnSync|execFile|\bfetch\s*\(|process\.env|https?:\/\/|writeFile/);
   assert.match(source, /validateApiContractSnapshot/);
   assert.match(source, /isAbsoluteIsoTimestamp/);
+});
+
+test("rejects webhooks, unknown operation fields, and unmodeled response schemas", () => {
+  const webhook = baseDocument("3.1.2");
+  webhook.components.schemas.User.properties.name = { type: ["string", "null"] };
+  webhook.webhooks = { event: {} };
+  assert.throws(() => openApiToSnapshot(webhook, metadata()), /webhooks/);
+
+  const unknown = baseDocument();
+  unknown.paths["/users/{id}"].get.futureField = true;
+  assert.throws(() => openApiToSnapshot(unknown, metadata()), /unsupported OpenAPI Operation field/);
+
+  const response = baseDocument();
+  response.paths["/users/{id}"].get.responses[200].content["application/json"] = {};
+  assert.throws(() => openApiToSnapshot(response, metadata()), /requires a schema/);
+});
+
+test("duplicate parameters within one OpenAPI parameter list are rejected", () => {
+  const document = baseDocument();
+  document.paths["/users/{id}"].get.parameters.push({ name: "verbose", in: "query", schema: { type: "boolean" } });
+  assert.throws(() => openApiToSnapshot(document, metadata()), /duplicate query:verbose/);
+});
+
+test("rejects schema keywords with unmodeled compatibility semantics", () => {
+  for (const field of ["format", "readOnly", "writeOnly", "pattern", "minimum"]) {
+    const document = baseDocument();
+    document.components.schemas.User.properties.name[field] = field === "minimum" ? 1 : field === "readOnly" || field === "writeOnly" ? true : "value";
+    assert.throws(() => openApiToSnapshot(document, metadata()), new RegExp(field));
+  }
+});
+
+test("rejects custom parameter serialization and malformed required flags", () => {
+  const styled = baseDocument();
+  styled.paths["/users/{id}"].get.parameters[0].style = "deepObject";
+  assert.throws(() => openApiToSnapshot(styled, metadata()), /serialization/);
+
+  const malformed = baseDocument();
+  malformed.paths["/users/{id}"].get.parameters[0].required = "yes";
+  assert.throws(() => openApiToSnapshot(malformed, metadata()), /required must be boolean/);
+});
+
+test("supports OpenAPI 3.2 QUERY and additional operations", () => {
+  const document = baseDocument("3.2.1");
+  document.components.schemas.User.properties.name = { type: ["string", "null"] };
+  document.paths["/users/{id}"].query = {
+    responses: { 200: { description: "ok", content: { "application/json": { schema: { type: "string" } } } } },
+  };
+  document.paths["/users/{id}"].additionalOperations = {
+    PURGE: { responses: { 204: { description: "done" } } },
+  };
+  const snapshot = openApiToSnapshot(document, metadata());
+  assert.equal(snapshot.operations.some((item) => item.method === "QUERY"), true);
+  assert.equal(snapshot.operations.some((item) => item.method === "PURGE"), true);
+});
+
+test("rejects OpenAPI 3.2-only operations in older descriptions", () => {
+  const document = baseDocument("3.1.2");
+  document.components.schemas.User.properties.name = { type: ["string", "null"] };
+  document.paths["/users/{id}"].query = { responses: { 204: { description: "done" } } };
+  assert.throws(() => openApiToSnapshot(document, metadata()), /QUERY operations require OpenAPI 3.2/);
 });
