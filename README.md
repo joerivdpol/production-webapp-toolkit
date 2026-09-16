@@ -186,7 +186,20 @@ bun run ci:evidence:github-actions \
 
 The workflow run must have `status: completed`, a non-empty name, a valid run ID, a full `head_sha`, and a conclusion. Every job must belong to that run, have `status: completed`, and have a unique non-empty name. GitHub job conclusions map deterministically: `success` becomes `PASS`; `skipped` and `neutral` become `SKIPPED`; `failure`, `cancelled`, `timed_out`, `action_required`, `startup_failure`, and `stale` become `FAIL`. Unknown conclusions, in-progress runs or jobs, mismatched run IDs, duplicate job names, or empty job sets are rejected rather than guessed.
 
-The adapter emits `provider: github-actions`, the workflow name, the run ID, and job names as CI check names. `--authenticated` only records a caller-supplied trust claim that the input payloads came through an authenticated collection path; it is not cryptographic proof and does not alter CI verification truth. `--collected-at` is mandatory because the adapter never generates or substitutes a collection time. A separate online collector may later obtain GitHub payloads automatically, but it will feed this same adapter and contract rather than changing verification semantics.
+The adapter emits `provider: github-actions`, the workflow name, the run ID, and job names as CI check names. `--authenticated` only records a caller-supplied trust claim that the input payloads came through an authenticated collection path; it is not cryptographic proof and does not alter CI verification truth. `--collected-at` is mandatory because the adapter never generates or substitutes a collection time.
+
+An optional read-only online collector can obtain those payloads through an already authenticated GitHub CLI session and feed the same adapter:
+
+```sh
+bun run ci:evidence:github-actions:collect \
+  --repository owner/repository \
+  --run-id 35070038181 \
+  --json > ci-evidence.json
+```
+
+The collector requires an explicit `owner/repository` and explicit numeric workflow run ID. It never selects the latest run, a branch, a commit, or a workflow automatically. It first verifies `gh auth status --hostname github.com`, then performs only `gh api --method GET` requests for the named workflow run and all of its job pages. Job pagination uses `per_page=100` until the API `total_count` is reached exactly. Authentication tokens are never command arguments or output, provider stderr is not forwarded, and collection failures return generic error messages. The shell redirect in the example writes the evidence file; the collector itself performs no file writes or Git mutations.
+
+Because this component is the collector, it records the actual collection time after the API payloads have been obtained. Its evidence source is `github-cli-api` and `authenticated: true` means only that `gh auth status` succeeded before the GET requests. That remains trust metadata rather than cryptographic proof. The collected document is still validated by the same offline GitHub Actions adapter and CI Evidence Contract before it is returned.
 
 ## Repository status
 

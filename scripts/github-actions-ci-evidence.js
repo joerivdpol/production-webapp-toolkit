@@ -49,7 +49,7 @@ function mapConclusion(conclusion) {
 /**
  * @param {unknown} runPayload
  * @param {unknown} jobsPayload
- * @param {{ collectedAt: unknown, authenticated?: unknown }} options
+ * @param {{ collectedAt: unknown, authenticated?: unknown, source?: unknown }} options
  * @returns {{ ok: true, evidence: import("./ci-evidence.js").CiEvidence } | { ok: false, error: { id: string, detail: string } }}
  */
 export function buildGitHubActionsCiEvidence(runPayload, jobsPayload, options) {
@@ -76,6 +76,10 @@ export function buildGitHubActionsCiEvidence(runPayload, jobsPayload, options) {
   const authenticated = options?.authenticated ?? false;
   if (typeof authenticated !== "boolean") {
     return { ok: false, error: { id: "github-authenticated-invalid", detail: "authenticated must be boolean when supplied" } };
+  }
+  const source = options?.source === undefined ? "github-actions-api-payload" : normalizedString(options.source);
+  if (!source) {
+    return { ok: false, error: { id: "github-source-invalid", detail: "source must be a non-empty string when supplied" } };
   }
   if (jobsPayload.jobs.length === 0) {
     return { ok: false, error: { id: "github-jobs-empty", detail: "workflow run must contain at least one job" } };
@@ -119,7 +123,7 @@ export function buildGitHubActionsCiEvidence(runPayload, jobsPayload, options) {
       runId,
     },
     evidence: {
-      source: "github-actions-api-payload",
+      source,
       authenticated,
       collectedAt,
     },
