@@ -1519,3 +1519,55 @@ bun run audit:payment-integrity -- \
 The evidence is intentionally bounded. Static call presence and same-file source order do not prove atomicity, database uniqueness, immutability, persisted values, provider behavior, transaction boundaries, or valid runtime state transitions. Stronger database and integration evidence is still required for those claims. `IGNORE` remains visible as a warning and makes no integrity claim.
 
 The audit is local and read only. It does not send payment requests, capture or refund money, inspect runtime environment values, execute source code, call providers, or mutate repository or production state. Source payloads are not copied into reports.
+
+### Booking integrity evidence and audit
+
+`bun run booking:integrity:evidence` validates provider-neutral Booking Integrity Evidence v1. The evidence binds empirical booking-test outcomes to an exact Git commit and carries explicit source, authentication, and collection-time metadata. Authentication is trust metadata only; it does not change measured outcome truth.
+
+Each evidence profile records five bounded metric families: competing concurrency attempts and oversold units, duplicate attempts and duplicate bookings, expired claims and unreleased claims, retry attempts and retry-created duplicates, and timezone cases and mismatches. The toolkit does not infer inventory capacity, expiry duration, timezone policy, or booking business rules from these numbers.
+
+`bun run audit:booking-integrity` combines that empirical evidence with a static booking-integrity profile. Static controls cover atomic-claim structure, duplicate prevention, expiry handling, inventory release, timezone consistency, and retry safety. Every control explicitly selects `FAIL`, `WARN`, or `IGNORE` and binds exact TypeScript/JavaScript call evidence.
+
+The empirical policy separately defines whether commit-bound evidence is required and the minimum or maximum acceptable outcome thresholds. For example, a project may require at least four competing attempts, zero oversold units, zero duplicate bookings, zero unreleased expired claims, zero retry duplicates, and zero timezone mismatches. These thresholds are private project policy rather than public-toolkit business truth.
+
+```json
+{
+  "version": 1,
+  "profiles": [
+    {
+      "id": "booking-core",
+      "controls": {
+        "atomicClaim": { "severity": "FAIL", "evidenceFiles": ["src/bookings/core.ts"], "callees": ["claimInventory"] },
+        "duplicatePrevention": { "severity": "FAIL", "evidenceFiles": ["src/bookings/core.ts"], "callees": ["rejectDuplicate"] },
+        "expiry": { "severity": "FAIL", "evidenceFiles": ["src/bookings/core.ts"], "callees": ["expireClaim"] },
+        "release": { "severity": "FAIL", "evidenceFiles": ["src/bookings/core.ts"], "callees": ["releaseInventory"] },
+        "timezoneConsistency": { "severity": "FAIL", "evidenceFiles": ["src/bookings/core.ts"], "callees": ["normalizeBookingTime"] },
+        "retrySafety": { "severity": "FAIL", "evidenceFiles": ["src/bookings/core.ts"], "callees": ["dedupeRetry"] }
+      },
+      "empiricalEvidence": {
+        "required": true,
+        "minCompetingAttempts": 4,
+        "maxOversoldUnits": 0,
+        "maxDuplicateBookings": 0,
+        "maxUnreleasedClaims": 0,
+        "maxRetryDuplicateBookings": 0,
+        "maxTimezoneMismatches": 0
+      }
+    }
+  ]
+}
+```
+
+```sh
+bun run booking:integrity:evidence -- --file ./booking-integrity-evidence.json --json
+bun run audit:booking-integrity -- \
+  --root /path/to/repository \
+  --policy /private/path/booking-integrity-policy.json \
+  --evidence ./booking-integrity-evidence.json \
+  --expected-commit <full-git-object-id> \
+  --json
+```
+
+A passing report means only that configured static control calls were found and the supplied commit-bound empirical metrics stayed within explicit thresholds. It does not independently prove database atomicity, lock correctness, isolation level, transaction boundaries, real inventory capacity, expiry semantics, or real-world booking correctness. Missing required evidence, commit drift, oversell, duplicates, unreleased claims, retry duplicates, and timezone mismatches remain separate findings.
+
+Both commands are local and read only. They do not execute bookings, mutate inventory, connect to databases, call providers, inspect runtime environment values, or copy source payloads into reports.
