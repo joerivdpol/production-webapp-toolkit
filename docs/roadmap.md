@@ -46,8 +46,9 @@ Core principles:
 * Repository CI status integration: merged.
 * Ecosystem CI status integration: merged.
 * GitHub Actions CI Evidence adapter: merged.
-* Authenticated read-only GitHub Actions CI Evidence collector: implementation in progress.
-* GitHub protection auditing and the remaining production-readiness capabilities remain open.
+* Authenticated read-only GitHub Actions CI Evidence collector: merged.
+* Read-only GitHub branch protection and ruleset audit: implementation in progress.
+* Environment contracts and the remaining production-readiness capabilities remain open.
 
 10. Add CI evidence for the exact commit being evaluated, including tests, typecheck, lint, and build outcomes.
 11. Add read only GitHub branch protection and ruleset auditing.
