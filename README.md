@@ -555,3 +555,18 @@ Useful commands:
 - bun run audit:release .
 - bun run audit:release . --expected-version 1.1.0
 - bun run release:verify
+
+### PostgreSQL security policy audit
+
+`bun run security:snapshot` validates PostgreSQL Security Snapshot v1. `bun run security:snapshot:postgres:collect` collects read-only catalog evidence through an explicit libpq service. `bun run audit:postgres-security` evaluates that evidence against an explicit version 1 project policy.
+
+Role names receive no built-in meaning. Projects explicitly declare the roles and privileges they want to prohibit. Security evidence includes schema, table, sequence, and function grants; RLS and FORCE RLS state; policy command, roles and permissive mode; boolean always-true signals; and security-definer search-path and execute metadata.
+
+Raw RLS predicates and function bodies are intentionally excluded from the evidence contract. The policy is bound to an explicit database identity and optional environment. Table selectors can require RLS, FORCE RLS, reject selected grants, or reject permissive always-true policies for selected roles. Separate rules cover schema and sequence grants plus security-definer search paths and execute grants.
+
+The collector accepts only an explicit libpq service and explicit schemas. It runs a generated `BEGIN READ ONLY` catalog query and returns canonical evidence. Provider failures are reduced to generic collection errors. Collection trust metadata never overrides policy results. The query and adapter are tested offline and against temporary PostgreSQL 17 with synthetic security objects.
+
+```sh
+bun run security:snapshot:postgres:collect --service production-audit --identity-name primary-database --environment production --schema public --json > postgres-security.json
+bun run audit:postgres-security --snapshot-file ./postgres-security.json --policy /private/path/postgres-security-policy.json
+```
