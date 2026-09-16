@@ -104,8 +104,9 @@ Core principles:
 ### Current v1.3 progress
 
 * Runtime Collector Observation v1 and shared adapter to canonical Runtime Evidence Contract v1 with explicit checkout, application-reported, container, and process identity scopes: merged.
-* Clean local Git checkout Runtime Evidence collector with explicit checkout-only identity scope: implementation complete on the active capability branch.
-* Application, container, process, health, synthetic, frontend, and operational assurance collectors remain open.
+* Clean local Git checkout Runtime Evidence collector with explicit checkout-only identity scope: merged.
+* Application-reported build identity collector for bounded local JSON files and explicit no-redirect version endpoints: implementation complete on the active capability branch.
+* Container, process, health, synthetic, frontend, and operational assurance collectors remain open.
 
 35. Add runtime evidence collectors as separate adapters that emit Runtime Evidence Contract documents.
 36. Support local Git checkout evidence while clearly labeling it as checkout evidence, not process identity.
