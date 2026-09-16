@@ -764,3 +764,19 @@ Lockfiles and generated inputs must be regular non symlink files and are read wi
 ```sh
 bun run audit:reproducibility --root . --policy config/build-reproducibility-policy.json
 ```
+
+### Artifact provenance contract and audit
+
+`bun run artifact:provenance` validates Artifact Provenance Contract v1. The contract explicitly binds a source commit to one exact CI provider, workflow and run identifier, one built artifact name plus SHA256, the artifact SHA256 claimed for a deployment target, and the intended runtime identity. It also carries evidence source, authentication and collection time as trust metadata.
+
+`bun run audit:artifact-provenance` composes that contract with existing canonical CI Evidence v1 and Runtime Evidence v1 documents. The audit independently verifies source commit equality with CI, exact CI provider/workflow/run identity, built artifact SHA256 equality with the deployed artifact SHA256 claim, runtime deployment commit equality with source, and exact runtime name/environment binding. A mismatch is blocking `FAIL`.
+
+```sh
+bun run artifact:provenance --file ./artifact-provenance.json
+bun run audit:artifact-provenance \
+  --provenance-file ./artifact-provenance.json \
+  --ci-evidence-file ./ci-evidence.json \
+  --runtime-evidence-file ./runtime-evidence.json
+```
+
+The validator and audit core are offline and read only. They do not build artifacts, deploy software, inspect a live runtime, call Git, read environment variables, or generate collection timestamps. `authenticated` fields are reported but never convert a matching claim into proof that a provider really built or deployed those bytes. Authenticity depends on the collector that produced the evidence; this layer only proves that explicit evidence documents form a consistent source → CI build → artifact → deployment → runtime chain.
