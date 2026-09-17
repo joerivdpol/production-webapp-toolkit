@@ -73,6 +73,29 @@ bun run agent:route -- --task ./agent-task.json --policy ./routing-policy.json -
 
 Role-policy PASS is not execution authority. A write task still needs Worker Lease v1 and an isolated worktree execution layer. Merge, deployment, payment, booking, migration, and production mutation remain outside Agent Task v1 authority.
 
+## Worker-local model adapter
+
+`bun run agent:model` provides Local Model Adapter v1. Model runtime configuration is private deployment state and is never inferred from Agent Worker v1 or committed as public infrastructure configuration. Each worker supplies its own private backend mapping from symbolic backend/model ids to a worker-local model runtime.
+
+Version 1 supports explicit `OLLAMA` and `OPENAI_COMPATIBLE` backends, but only on literal loopback HTTP origins with an explicit port. Hostnames, LAN addresses, remote addresses, TLS/cloud endpoints, credentials, URL paths, queries, and fragments are rejected. The adapter therefore runs next to the model runtime on the same worker. Other toolkit users must operate their own workers and local model servers; a public toolkit checkout provides no access to any maintainer-operated models.
+
+Prompts are supplied through bounded regular non-symlink files rather than command-line prompt text. Model configuration is also a bounded regular non-symlink JSON file. A request selects exactly one symbolic backend and one symbolic model. Failure of that backend fails the request; no alternative backend and no cloud provider are tried. Provider redirects are rejected. Responses are bounded before JSON parsing.
+
+```sh
+bun run agent:model -- \
+  --config /private/state/model-backends.json \
+  --backend worker-local \
+  --model small-local \
+  --system-file /private/task/system.txt \
+  --prompt-file /private/task/prompt.txt \
+  --temperature 0 \
+  --max-output-tokens 256 \
+  --timeout-ms 30000 \
+  --json
+```
+
+The normalized result includes the symbolic backend/model id, response content, finish reason, and optional usage counts. It deliberately omits the private base URL, provider model name, and prompt content. The adapter does not persist model responses by itself and has no SSH, subprocess, environment-secret, merge, deployment, or production-mutation surface.
+
 ## Initial roles
 
 The initial safe roles are `diagnose`, `reproduce`, and `review`. They are intended to establish evidence quality before source-modifying automation is enabled. `repair`, `docs`, `contract`, `dependency`, and `incident` are reserved Agent Task v1 roles for later phases with separate policy and execution boundaries.
