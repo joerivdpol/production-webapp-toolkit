@@ -1761,3 +1761,19 @@ Identifiers are portable bounded tokens rather than a hardcoded list of provider
 Repository Manifest v1 deliberately does not resolve policy packs, infer repository shape, execute checks, or decide whether a declared provider/capability exists. Existing heuristic profile detection remains a legacy convenience until policy-pack evaluation is introduced separately. Private organization policy and application-specific canonical truth do not belong in the public manifest.
 
 The validator is offline and read only. It reads only the explicitly supplied manifest JSON and does not inspect repository contents, runtime environment, Git state, network providers, or production systems.
+
+### Policy packs
+
+`bun run policy:resolve` resolves Repository Manifest v1 against the versioned public policy-pack registry. Built-in profiles include `service`, `webapp`, `python-service`, `database-service`, `database-backed-webapp`, `payment-service`, `booking-service`, `worker`, and `bot`. Packs inherit from generic bases and contribute runtime/database requirements, explicit capability requirements, and required/advisory check ids.
+
+Policy composition is monotone. Pack-required checks are always retained. A repository manifest may add further required checks or promote a pack-advisory check to required, but explicitly listing a pack-required check as advisory is a blocking configuration failure rather than a silent downgrade. Effective advisory checks automatically exclude anything that is required at any layer.
+
+Database-backed profiles require an explicit non-null database declaration. `payment-service` requires the explicit `payments` capability and adds payment-integrity, webhook-safety, provenance, vulnerability, and rollback controls. `booking-service` requires the explicit `bookings` capability and adds booking-integrity, provenance, and rollback controls. Worker and bot packs keep scheduler checks advisory because those profiles do not imply a scheduled-job architecture.
+
+```sh
+bun run policy:resolve -- --manifest-file ./toolkit-manifest.json --json
+```
+
+The resolver does not execute checks. Its output is the deterministic effective policy that later multi-project orchestration can consume. It never falls back from an unknown manifest profile to heuristic repository detection. The built-in registry contains generic engineering policy only; organization-specific owners, providers, business rules, canonical pricing, booking rules, or other private truth remain outside the public toolkit.
+
+The resolver is offline and read only. It reads only the explicit manifest and the built-in versioned registry; it does not inspect runtime environment values, contact providers, mutate repositories, or access production systems.
