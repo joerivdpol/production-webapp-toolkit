@@ -81,7 +81,8 @@ function validateScopedChecks(value, errors, scope) {
     }
     seen.add(key);
     const expectedImpact = status === "PASS" ? "PASS" : requirement === "required" && status === "FAIL" ? "FAIL" : "WARN";
-    if (impact !== expectedImpact) errors.push({ id: `${scope}-impact-invalid`, detail: `${scope}[${index}] impact is inconsistent with requirement and status` });
+    const weakenedImpact = status === "PASS" ? impact !== "PASS" : impact === "PASS" || (expectedImpact === "FAIL" && impact !== "FAIL");
+    if (weakenedImpact) errors.push({ id: `${scope}-impact-invalid`, detail: `${scope}[${index}] impact is weaker than the canonical requirement/status baseline` });
     result.push({ id: checkId, requirement, status, impact });
   }
   return result.sort((a, b) => a.id.localeCompare(b.id));
