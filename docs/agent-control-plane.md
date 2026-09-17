@@ -259,6 +259,48 @@ bun run agent:repair -- apply \
 
 Apply changes only the isolated worktree. It does not execute the required checks, commit, push, open or merge a pull request, deploy, mutate production, or call an external provider. The returned `requiredChecks` are obligations for a later sandbox or human-controlled execution layer. Real repository rules, source context, worker ids, model mappings, leases, and policy files remain private operator state.
 
+## Documentation Agent v1
+
+`bun run agent:docs` performs bounded documentation maintenance above the shared Agent Task, Role Policy, Worker Lease, linked-worktree, and exact-context primitives. The public documentation policy is proposal-only by default. A private operator policy must explicitly opt in to `ALLOW_LOW_RISK_WORKTREE` before ordinary documentation can be changed in a worktree.
+
+Documentation Input v1 reuses the exact source-task, evidence, and context-file binding used by Repair v1. Before model invocation, every context file is SHA256-checked against a clean linked Git worktree whose `HEAD` equals the task `baseCommit`. The model receives only caller-selected evidence and context; it does not browse the repository or invent commands, architecture, business rules, release facts, or runtime truth.
+
+Documentation Proposal v1 accepts only document-like text extensions: Markdown, MDX, plain text, reStructuredText, and AsciiDoc. `MODIFY` requires an exact before-SHA256 and `CREATE` cannot overwrite an existing path. Delete and rename are not supported.
+
+Some paths are hard protected independently of private policy. `AGENTS.md`, `CODEOWNERS`, `SECURITY.md`, `.github/**`, policy/policies/governance path segments, and filenames containing `policy` are always classified `HUMAN_REVIEW_REQUIRED`. Private policy may add more human-review patterns but cannot remove these built-in protections.
+
+```sh
+bun run agent:docs -- propose \
+  --task /private/tasks/docs.json \
+  --role-policy /private/policy/agent-roles.json \
+  --policy /private/policy/documentation.json \
+  --input /private/tasks/documentation-input.json \
+  --worktree /private/worktrees/docs-task \
+  --model-config /private/config/model-backends.json \
+  --backend worker-local \
+  --model docs-local \
+  --json
+```
+
+Proposal generation never mutates the worktree. Apply is a separate operation and is available only for an exact `LOW` risk docs task, private `ALLOW_LOW_RISK_WORKTREE` policy, a RUNNING task, a matching active WRITE lease, a clean linked worktree at the exact base commit, and a proposal containing no human-review-required path. Documentation v1 additionally requires shell `NONE` and network `NONE`.
+
+```sh
+bun run agent:docs -- apply \
+  --task /private/tasks/docs.json \
+  --role-policy /private/policy/agent-roles.json \
+  --policy /private/policy/documentation.json \
+  --input /private/tasks/documentation-input.json \
+  --worktree /private/worktrees/docs-task \
+  --proposal /private/tasks/documentation-proposal.json \
+  --registry /private/state/agent-control.sqlite \
+  --lease-id lease:example \
+  --worker-id worker-example \
+  --evaluated-at 2026-09-17T15:01:00Z \
+  --json
+```
+
+Apply rechecks existing file hashes immediately before write and requires Git status to contain exactly the declared documentation paths. It executes no checks, commit, push, PR, merge, deployment, or production-provider action. Required checks remain explicit obligations for a later sandbox or human-controlled execution layer. The public templates are synthetic; real repository paths, evidence, context, leases, workers, and model mappings remain private operator state.
+
 ## Initial roles
 
 The initial safe roles are `diagnose`, `reproduce`, and `review`. They are intended to establish evidence quality before source-modifying automation is enabled. `repair`, `docs`, `contract`, `dependency`, and `incident` are reserved Agent Task v1 roles for later phases with separate policy and execution boundaries.

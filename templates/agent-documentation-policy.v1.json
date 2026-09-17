@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "repository": "example-repository",
+  "allowedPathPatterns": [
+    "README.md",
+    "docs/**",
+    "AGENTS.md",
+    "SECURITY.md",
+    ".github/**/*.md"
+  ],
+  "humanReviewPathPatterns": [
+    "AGENTS.md",
+    "SECURITY.md",
+    ".github/**",
+    "docs/policies/**",
+    "docs/governance/**"
+  ],
+  "applyMode": "PROPOSE_ONLY",
+  "maxFiles": 3,
+  "maxFileBytes": 65536,
+  "maxTotalBytes": 131072,
+  "requiredChecks": [
+    "documentation-drift",
+    "lint"
+  ]
+}

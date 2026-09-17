@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "taskId": "task:docs-example",
+  "repository": {
+    "id": "example-repository",
+    "commit": "0123456789abcdef0123456789abcdef01234567"
+  },
+  "sourceTaskIds": [
+    "task:documentation-audit-example"
+  ],
+  "evidence": [
+    {
+      "id": "documentation-drift",
+      "source": "documentation-drift",
+      "status": "FAIL",
+      "summary": "A synthetic command reference is stale",
+      "path": "README.md"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "README.md",
+      "sha256": "b8f1ea12c66b1bd76ea1e800a668ba432d6c9e50682d192e3736f93df3d18a72",
+      "content": "# Example\n\nOld command reference.\n"
+    }
+  ],
+  "unknowns": []
+}

@@ -133,7 +133,8 @@
     "agent:reproduce": "node scripts/agent-reproduction.js",
     "agent:review": "node scripts/agent-independent-review.js",
     "agent:evaluate": "node scripts/agent-evaluation-corpus.js",
-    "agent:repair": "node scripts/agent-repair.js"
+    "agent:repair": "node scripts/agent-repair.js",
+    "agent:docs": "node scripts/agent-documentation.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
