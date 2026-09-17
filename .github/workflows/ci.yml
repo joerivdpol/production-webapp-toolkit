@@ -22,6 +22,8 @@ jobs:
         with:
           bun-version: 1.3.14
       - run: bun install --frozen-lockfile
+      - name: Install sandbox runtime
+        run: sudo apt-get update && sudo apt-get install --yes bubblewrap
 
       - name: Public repository safety
         run: node scripts/audit-public-repo-safety.js .
