@@ -158,8 +158,8 @@ Core principles:
 * Repository Check Evidence v1 plus policy-aware cross-repository Ecosystem Dashboard v1 with stable machine-readable summaries: merged.
 * Validated Ecosystem Dashboard v1 snapshot history comparison with descriptive repository/check transitions that preserve prior/current audit truth: merged.
 * Scheduled Reporting Policy v1 and deterministic notification planner with declarative cadence, symbolic sink ids, current-state/history triggers, and no dispatch surface: merged.
-* Severity Policy v1 with monotone required/advisory promotion, non-pass impact escalation, and Ecosystem Dashboard integration without silent weakening: implementation complete on the active capability branch.
-* v1.4 multi-project-control capabilities are complete pending merge of the active severity-policy capability.
+* Severity Policy v1 with monotone required/advisory promotion, non-pass impact escalation, and Ecosystem Dashboard integration without silent weakening: merged.
+* v1.4 multi-project-control capabilities are complete.
 
 56. Introduce a versioned repository manifest so projects can declare profile, runtime, database, capabilities, and required checks.
 57. Introduce policy packs such as webapp, Python service, database backed webapp, payment service, booking service, worker, and bot.
@@ -170,6 +170,11 @@ Core principles:
 62. Add configurable severity and required versus advisory policy without allowing silent policy weakening.
 
 ## v2.0 Controlled automation
+
+### Current v2.0 progress
+
+* Remediation Plan v1 expands existing remediation output with automation posture, remediation risk, ownership, repository-relative file targets, and canonical validation requirements while preserving the existing safe/manual executor contract: implementation complete on the active capability branch.
+* Safe autofix expansion and the remaining controlled-automation capabilities remain open.
 
 63. Expand machine readable remediation plans with risk, ownership, files, and validation requirements.
 64. Add safe autofix only for deterministic low risk repository configuration changes.

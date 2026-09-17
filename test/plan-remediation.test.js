@@ -68,6 +68,17 @@ jobs:
       },
     ],
   );
+
+  const item = plan.items[0];
+  assert.ok(item);
+  assert.equal(plan.version, 1);
+  assert.equal(item.automatic, true);
+  assert.equal(item.risk, "LOW");
+  assert.equal(item.ownership, "toolkit");
+  assert.deepEqual(item.files, ["scripts/lint-changed.js"]);
+  assert.deepEqual(item.validation, { checks: ["changed-lint-script"], commands: [] });
+  assert.deepEqual(plan.summary.risk, { low: 1, medium: 0, high: 0 });
+  assert.deepEqual(plan.summary.ownership, { toolkit: 1, repository: 0 });
 });
 
 test("keeps repository-specific scripts and CI as manual remediation", () => {
@@ -101,16 +112,41 @@ test("keeps repository-specific scripts and CI as manual remediation", () => {
     "ci-changed-lint",
     "ci-build",
   ]) {
-    assert.equal(
-      plan.items.find((item) => item.id === id)?.remediation,
-      "manual",
-      `${id} should require manual remediation`,
-    );
+    const item = plan.items.find((candidate) => candidate.id === id);
+    assert.equal(item?.remediation, "manual", `${id} should require manual remediation`);
+    assert.equal(item?.automatic, false);
+    assert.equal(item?.risk, "MEDIUM");
+    assert.equal(item?.ownership, "repository");
+    assert.deepEqual(item?.validation, { checks: [id], commands: [] });
   }
+
+  assert.deepEqual(
+    plan.items.find((item) => item.id === "lint-script")?.files,
+    ["package.json"],
+  );
+  assert.deepEqual(
+    plan.items.find((item) => item.id === "ci-build")?.files,
+    [".github/workflows/*.yml", ".github/workflows/*.yaml"],
+  );
+});
+
+test("unknown deterministic remediation stays high risk and does not invent file changes", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "remediation-unknown-"));
+  const plan = planRemediation(root);
+  const item = plan.items.find((candidate) => candidate.id === "package-json");
+
+  assert.ok(item);
+  assert.equal(item.remediation, "manual");
+  assert.equal(item.automatic, false);
+  assert.equal(item.risk, "HIGH");
+  assert.equal(item.ownership, "repository");
+  assert.deepEqual(item.files, []);
+  assert.deepEqual(item.validation, { checks: ["package-json"], commands: [] });
 });
 
 test("formats a clean repository as requiring no remediation", () => {
   const plan = {
+    version: 1,
     report: {
       root: "/tmp/example",
       checks: [],
@@ -124,6 +160,8 @@ test("formats a clean repository as requiring no remediation", () => {
       total: 0,
       safe: 0,
       manual: 0,
+      risk: { low: 0, medium: 0, high: 0 },
+      ownership: { toolkit: 0, repository: 0 },
     },
   };
 
@@ -159,8 +197,12 @@ test("CLI produces machine-readable JSON output", () => {
   /** @type {ReturnType<typeof planRemediation>} */
   const parsed = JSON.parse(output);
 
+  assert.equal(parsed.version, 1);
   assert.equal(parsed.report.root, root);
   assert.equal(parsed.summary.total, parsed.items.length);
+  assert.equal(parsed.summary.risk.low + parsed.summary.risk.medium + parsed.summary.risk.high, parsed.items.length);
+  assert.equal(parsed.summary.ownership.toolkit + parsed.summary.ownership.repository, parsed.items.length);
+  assert.equal(parsed.items.every((item) => item.automatic === (item.remediation === "safe")), true);
   assert.equal(
     parsed.summary.safe,
     parsed.items.filter((item) => item.remediation === "safe").length,

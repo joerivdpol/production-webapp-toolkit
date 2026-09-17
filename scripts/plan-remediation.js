@@ -9,9 +9,56 @@ import { inspectRepository } from "./audit-repository.js";
  *   id: string,
  *   label: string,
  *   remediation: "safe" | "manual",
+ *   automatic: boolean,
+ *   risk: "LOW" | "MEDIUM" | "HIGH",
+ *   ownership: "toolkit" | "repository",
+ *   files: string[],
+ *   validation: { checks: string[], commands: string[] },
  *   reason: string
  * }} RemediationItem
  */
+/** @typedef {{ automatic:boolean, risk:"LOW"|"MEDIUM"|"HIGH", ownership:"toolkit"|"repository", files:string[], validation:{checks:string[],commands:string[]} }} RemediationMetadata */
+
+/** @param {string} id @returns {RemediationMetadata} */
+function remediationMetadata(id) {
+  if (id === "changed-lint-script") {
+    return {
+      automatic: true,
+      risk: "LOW",
+      ownership: "toolkit",
+      files: ["scripts/lint-changed.js"],
+      validation: { checks: [id], commands: [] },
+    };
+  }
+
+  if (["lint-script", "typecheck-script", "test-script", "check-script"].includes(id)) {
+    return {
+      automatic: false,
+      risk: "MEDIUM",
+      ownership: "repository",
+      files: ["package.json"],
+      validation: { checks: [id], commands: [] },
+    };
+  }
+
+  if (["github-ci", "ci-typecheck", "ci-tests", "ci-changed-lint", "ci-build"].includes(id)) {
+    return {
+      automatic: false,
+      risk: "MEDIUM",
+      ownership: "repository",
+      files: [".github/workflows/*.yml", ".github/workflows/*.yaml"],
+      validation: { checks: [id], commands: [] },
+    };
+  }
+
+  return {
+    automatic: false,
+    risk: "HIGH",
+    ownership: "repository",
+    files: [],
+    validation: { checks: [id], commands: [] },
+  };
+}
 
 /** @param {string} target */
 export function planRemediation(target) {
@@ -29,6 +76,7 @@ export function planRemediation(target) {
           id: check.id,
           label: check.label,
           remediation: "safe",
+          ...remediationMetadata(check.id),
           reason: "The toolkit owns a reusable changed-files lint implementation.",
         });
         break;
@@ -41,6 +89,7 @@ export function planRemediation(target) {
           id: check.id,
           label: check.label,
           remediation: "manual",
+          ...remediationMetadata(check.id),
           reason: "The correct command depends on the repository's existing toolchain.",
         });
         break;
@@ -54,6 +103,7 @@ export function planRemediation(target) {
           id: check.id,
           label: check.label,
           remediation: "manual",
+          ...remediationMetadata(check.id),
           reason: "Existing workflows and repository-specific CI behavior must be preserved.",
         });
         break;
@@ -63,6 +113,7 @@ export function planRemediation(target) {
           id: check.id,
           label: check.label,
           remediation: "manual",
+          ...remediationMetadata(check.id),
           reason: "No deterministic automatic remediation is defined.",
         });
     }
@@ -72,12 +123,22 @@ export function planRemediation(target) {
   const manualCount = items.filter((item) => item.remediation === "manual").length;
 
   return {
+    version: 1,
     report,
     items,
     summary: {
       total: items.length,
       safe: safeCount,
       manual: manualCount,
+      risk: {
+        low: items.filter((item) => item.risk === "LOW").length,
+        medium: items.filter((item) => item.risk === "MEDIUM").length,
+        high: items.filter((item) => item.risk === "HIGH").length,
+      },
+      ownership: {
+        toolkit: items.filter((item) => item.ownership === "toolkit").length,
+        repository: items.filter((item) => item.ownership === "repository").length,
+      },
     },
   };
 }
@@ -93,7 +154,9 @@ export function formatRemediationPlan(plan) {
 
   for (const item of plan.items) {
     lines.push(
-      `${item.remediation === "safe" ? "SAFE" : "MANUAL"}  ${item.label}`,
+      `${item.remediation === "safe" ? "SAFE" : "MANUAL"}  ${item.risk}  ${item.ownership.toUpperCase()}  ${item.label}`,
+      `  Files: ${item.files.join(", ") || "(repository-specific; not inferred)"}`,
+      `  Validate: ${item.validation.checks.join(", ")}`,
       `  ${item.reason}`,
     );
   }
