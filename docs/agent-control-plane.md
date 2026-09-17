@@ -137,6 +137,48 @@ bun run agent:diagnose -- \
 
 Diagnosis v1 does not execute verification proposals. The later Reproduction Agent is responsible for turning a verified diagnosis target into an isolated failing regression test under a separate leased-worktree write boundary.
 
+## Reproduction Agent v1
+
+`bun run agent:reproduce` turns one selected Diagnosis Result v1 hypothesis into exactly one new regression-test candidate. The generate path requires a `reproduce` Agent Task v1, Agent Role Policy v1, private Reproduction Policy v1, the local SQLite task registry, an active WRITE lease owned by the supplied worker, an exact diagnosis input/result pair, and a private worker-local model configuration.
+
+Before the model is invoked, the target repository must be a clean linked Git worktree whose `HEAD` equals the task `baseCommit`. The primary checkout is rejected. The registered task must exactly match the supplied task and be `RUNNING`; the lease must be active, WRITE mode, and bound to the same task, worker, and repository. Reproduction v1 additionally requires shell `NONE` and network `NONE` because this capability does not execute project code or access external services.
+
+The model may propose one new test file only. The path must satisfy both Agent Task path scope and the private Reproduction Policy. The parent directory must already exist and must not be a symlink. Existing files are never overwritten. After writing, Git status must show exactly that one untracked test file and no other change; otherwise the new file is removed and the operation fails.
+
+Generated JavaScript/TypeScript tests must parse, contain an explicit `test`/`it` call and assertion call, and may not use skip, focus, todo, fixme, expected-failure, lint, type-check, or coverage bypass constructs. Python tests require an explicit `test_` function and `assert`, while common skip/xfail constructs are rejected. The generated test is not executed by Reproduction v1.
+
+```sh
+bun run agent:reproduce -- generate \
+  --task /private/tasks/reproduce.json \
+  --role-policy /private/policy/agent-roles.json \
+  --policy /private/policy/reproduction.json \
+  --registry /private/state/agent-control.sqlite \
+  --lease-id lease:example \
+  --worker-id worker-example \
+  --evaluated-at 2026-09-17T12:01:00Z \
+  --worktree /private/worktrees/task \
+  --diagnosis-input /private/tasks/diagnosis-input.json \
+  --diagnosis-result /private/tasks/diagnosis-result.json \
+  --hypothesis-id hypothesis-one \
+  --model-config /private/config/model-backends.json \
+  --backend worker-local \
+  --model small-local \
+  --json
+```
+
+Generation returns `PENDING_VERIFICATION`. A separate `verify` command accepts Reproduction Run Evidence v1 bound to the exact task, repository commit, test path, and SHA256. It re-applies task and reproduction policy, re-checks the linked worktree and test safety, and never reads raw runner logs. `outcome: FAIL` becomes `FAILING_TEST_REPORTED`, not “confirmed”: the toolkit did not independently execute the test, and caller-supplied `authenticated` metadata does not prove runtime truth. The later sandbox and signed-evidence layers can strengthen this boundary.
+
+```sh
+bun run agent:reproduce -- verify \
+  --task /private/tasks/reproduce.json \
+  --policy /private/policy/reproduction.json \
+  --worktree /private/worktrees/task \
+  --run-evidence /private/tasks/reproduction-run.json \
+  --json
+```
+
+The public `templates/agent-reproduction-policy.v1.json` is generic. Repository paths, worker ids, leases, model mappings, worktree locations, and run evidence remain operator-owned private state.
+
 ## Initial roles
 
 The initial safe roles are `diagnose`, `reproduce`, and `review`. They are intended to establish evidence quality before source-modifying automation is enabled. `repair`, `docs`, `contract`, `dependency`, and `incident` are reserved Agent Task v1 roles for later phases with separate policy and execution boundaries.
