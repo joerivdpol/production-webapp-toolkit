@@ -121,8 +121,9 @@ Core principles:
 * Optional payment integrity profile for idempotency, provider binding, amount and currency pre-provider ordering, webhook signature verification, refund linkage, capture state, and reconciliation hooks: merged.
 * Booking Integrity Evidence v1 plus optional booking integrity profile for atomic-claim structure, duplicate prevention, expiry, release, timezone and retry controls with commit-bound concurrency outcomes: merged.
 * Policy-driven scheduled job audit for explicit timezone, scheduler registration, locking/overlap posture, timeout, retries, and dead-letter handling: merged.
-* Backup Readiness Evidence v1 plus deterministic backup/restore readiness audit for recency, encryption policy, restore instructions, and restore-test evidence: implementation complete on the active capability branch.
-* Disaster recovery readiness contracts and the remaining operational assurance capabilities remain open.
+* Backup Readiness Evidence v1 plus deterministic backup/restore readiness audit for recency, encryption policy, restore instructions, and restore-test evidence: merged.
+* Disaster Recovery Contract v1 and deterministic readiness audit for source, database, secrets, DNS, deployment, rollback, and restore ownership/runbook coverage: implementation complete on the active capability branch.
+* Rollback readiness and the remaining operational assurance capabilities remain open.
 
 35. Add runtime evidence collectors as separate adapters that emit Runtime Evidence Contract documents.
 36. Support local Git checkout evidence while clearly labeling it as checkout evidence, not process identity.
