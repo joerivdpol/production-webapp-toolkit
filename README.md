@@ -577,6 +577,21 @@ Before writing, the executor requires a regular non-symlink repository root, ref
 
 These constraints are fail-closed guardrails, not a generic patch engine. A future planner bug cannot make a medium/high-risk or repository-owned item executable merely by labeling it `safe`; all autofix metadata must agree and the implementation id must already be explicitly supported.
 
+### AI agent safety profile
+
+`bun run audit:agent-safety` evaluates an explicit Agent Safety Policy v1 against a repository. The policy names the repository's `AGENTS.md`, one or more canonical source documents, exact test commands, and explicit policy-file bindings for secrets, migrations, and deployment. The public toolkit does not invent those paths or infer private business rules.
+
+Canonical and boundary documents must be non-empty regular non-symlink files. `AGENTS.md` must reference each configured path as inline code or a markdown link. Required test commands must appear as exact lines inside fenced code blocks; prose that merely mentions a command does not satisfy the check. The audit reads `AGENTS.md` to verify those references but deliberately does not read or interpret the contents of canonical business documents or boundary policy files.
+
+```sh
+bun run audit:agent-safety -- \
+  --root /path/to/repository \
+  --policy /private/path/agent-safety-policy.json \
+  --json
+```
+
+This is document-binding evidence only. A passing result does not prove that an agent read, understood, or obeyed the referenced instructions, and it does not authorize secrets access, migration changes, deployment, provider actions, or other production mutations. Repository-specific canonical truth and organization policy can remain outside the public toolkit.
+
 ### PostgreSQL security policy audit
 
 `bun run security:snapshot` validates PostgreSQL Security Snapshot v1. `bun run security:snapshot:postgres:collect` collects read-only catalog evidence through an explicit libpq service. `bun run audit:postgres-security` evaluates that evidence against an explicit version 1 project policy.
