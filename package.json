@@ -107,7 +107,8 @@
     "rollback:contract": "node scripts/rollback-readiness-contract.js",
     "audit:rollback-readiness": "node scripts/audit-rollback-readiness.js",
     "manifest:validate": "node scripts/repository-manifest.js",
-    "policy:resolve": "node scripts/policy-packs.js"
+    "policy:resolve": "node scripts/policy-packs.js",
+    "policy:organization": "node scripts/organization-policy.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",

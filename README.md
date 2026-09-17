@@ -1777,3 +1777,43 @@ bun run policy:resolve -- --manifest-file ./toolkit-manifest.json --json
 The resolver does not execute checks. Its output is the deterministic effective policy that later multi-project orchestration can consume. It never falls back from an unknown manifest profile to heuristic repository detection. The built-in registry contains generic engineering policy only; organization-specific owners, providers, business rules, canonical pricing, booking rules, or other private truth remain outside the public toolkit.
 
 The resolver is offline and read only. It reads only the explicit manifest and the built-in versioned registry; it does not inspect runtime environment values, contact providers, mutate repositories, or access production systems.
+
+### Private organization policy inheritance
+
+`bun run policy:organization` composes a private Organization Policy v1 file above the public policy-pack result for a Repository Manifest v1. The public toolkit contains the inheritance engine only. Real organization ids, repository ids, ownership choices, private controls, and business-specific policy stay in caller-supplied files outside this repository.
+
+Organization policy has three additive layers evaluated in order: `global`, an exact profile match, and an exact repository match. Each layer may require runtime/database presence, additional explicit capabilities, and required or advisory check ids. `false` runtime/database flags mean no additional requirement; they never remove requirements inherited from a public policy pack or an earlier organization layer.
+
+Composition is monotone. An organization layer cannot mark an already-required check advisory. Later layers may promote inherited advisory checks to required. A repository manifest that marks an organization-required check advisory is reported as a blocking policy conflict rather than being silently promoted. Required capabilities are unioned across all selected layers and must remain explicitly declared in the repository manifest.
+
+```json
+{
+  "version": 1,
+  "organization": { "id": "example-org" },
+  "global": {
+    "requirements": { "runtime": false, "database": false, "capabilities": [] },
+    "checks": { "required": ["vulnerabilities"], "advisory": [] }
+  },
+  "profiles": [
+    {
+      "profile": "webapp",
+      "policy": {
+        "requirements": { "runtime": false, "database": false, "capabilities": [] },
+        "checks": { "required": ["authorization"], "advisory": ["localization"] }
+      }
+    }
+  ],
+  "repositories": []
+}
+```
+
+```sh
+bun run policy:organization -- \
+  --manifest-file ./toolkit-manifest.json \
+  --organization-policy-file /private/path/organization-policy.json \
+  --json
+```
+
+Unknown public profiles remain failures and cannot be rescued by private organization policy. Organization inheritance therefore extends a valid public engineering baseline instead of replacing it. The resolver only produces deterministic effective policy; it does not execute checks or contact external systems.
+
+The engine is offline and read only. It reads only the two explicit JSON inputs plus the built-in public pack registry. It does not inspect environment values, Git remotes, external providers, production data, or business configuration.
