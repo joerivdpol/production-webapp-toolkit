@@ -96,6 +96,24 @@ bun run agent:model -- \
 
 The normalized result includes the symbolic backend/model id, response content, finish reason, and optional usage counts. It deliberately omits the private base URL, provider model name, and prompt content. The adapter does not persist model responses by itself and has no SSH, subprocess, environment-secret, merge, deployment, or production-mutation surface.
 
+## Local worker observation and discovery
+
+`bun run agent:worker:observe` converts a private Worker Declaration v1 into Agent Worker v1 heartbeat evidence. CPU concurrency and total memory are observed locally through the Node runtime. Optional GPU metadata, capabilities, execution capacity, current load, and symbolic model metadata are explicit declaration inputs. Model-bearing declarations must be cross-checked against an explicit private Local Model Adapter config; only symbolic backend/model ids enter the heartbeat, never provider model names or local runtime URLs.
+
+`bun run agent:worker:registry` registers explicit heartbeat files in the same local SQLite control-plane database. Registry schema v3 keeps only the latest validated heartbeat per worker plus append-only heartbeat history. A heartbeat with an older observation time is rejected. Reusing the same observation time with different content is a conflict. Every latest record is revalidated and SHA256-checked when read, so direct database corruption cannot silently become worker truth.
+
+Discovery is local and deterministic. An explicit evaluation time plus maximum heartbeat age yields `FRESH`, `STALE`, or `FUTURE`. Only a `FRESH` worker whose Agent Worker state is `ONLINE` is marked routable. Agent Route v1 still performs its own freshness and capability checks; discovery does not weaken routing policy.
+
+```sh
+bun run agent:worker:observe -- --declaration /private/worker.json --model-config /private/model-backends.json --json > /private/state/worker-heartbeat.json
+bun run agent:worker:registry -- register --db /private/state/agent-tasks.sqlite --heartbeat /private/state/worker-heartbeat.json --registered-at 2026-09-17T12:30:02Z --json
+bun run agent:worker:registry -- discover --db /private/state/agent-tasks.sqlite --evaluated-at 2026-09-17T12:30:30Z --max-age-seconds 120 --json
+```
+
+The public capability deliberately includes no heartbeat transport. A persistent controller may register its own local heartbeat and may accept heartbeat files from optional compute workers through an operator-selected private authenticated transport, but SSH configuration, overlay-network addressing, worker URLs, credentials, and maintainer infrastructure do not belong in this repository. A public installation therefore discovers only workers that its own operator explicitly registers.
+
+The example `templates/agent-worker-declaration.v1.json` contains generic symbolic ids only. Operators must replace it with their own private declaration and capacity policy.
+
 ## Initial roles
 
 The initial safe roles are `diagnose`, `reproduce`, and `review`. They are intended to establish evidence quality before source-modifying automation is enabled. `repair`, `docs`, `contract`, `dependency`, and `incident` are reserved Agent Task v1 roles for later phases with separate policy and execution boundaries.

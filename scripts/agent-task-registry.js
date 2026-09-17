@@ -99,7 +99,7 @@ function configure(db) {
 /** @param {DatabaseSync} db */
 function installSchema(db) {
   const version = Number(db.prepare("PRAGMA user_version").get()?.user_version ?? 0);
-  if (![0, 1, 2].includes(version)) throw new Error(`unsupported agent registry schema version ${version}`);
+  if (![0, 1, 2, 3].includes(version)) throw new Error(`unsupported agent registry schema version ${version}`);
   db.exec(`
     CREATE TABLE IF NOT EXISTS agent_tasks (
       id TEXT PRIMARY KEY,
@@ -189,7 +189,37 @@ function installSchema(db) {
     CREATE TRIGGER IF NOT EXISTS agent_worker_lease_events_no_delete
       BEFORE DELETE ON agent_worker_lease_events
       BEGIN SELECT RAISE(ABORT, 'agent worker lease events are append-only'); END;
-    PRAGMA user_version = 2;
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_workers (
+      worker_id TEXT PRIMARY KEY,
+      worker_json TEXT NOT NULL,
+      worker_sha256 TEXT NOT NULL CHECK(length(worker_sha256) = 64),
+      observed_at TEXT NOT NULL,
+      registered_at TEXT NOT NULL,
+      revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0)
+    );
+    CREATE INDEX IF NOT EXISTS agent_workers_observed_idx ON agent_workers(observed_at, worker_id);
+    CREATE TABLE IF NOT EXISTS agent_worker_heartbeat_events (
+      seq INTEGER PRIMARY KEY AUTOINCREMENT,
+      worker_id TEXT NOT NULL REFERENCES agent_workers(worker_id) ON DELETE RESTRICT,
+      observed_at TEXT NOT NULL,
+      registered_at TEXT NOT NULL,
+      revision INTEGER NOT NULL CHECK(revision >= 0),
+      worker_sha256 TEXT NOT NULL CHECK(length(worker_sha256) = 64),
+      event TEXT NOT NULL CHECK(event IN ('REGISTERED','UPDATED'))
+    );
+    CREATE INDEX IF NOT EXISTS agent_worker_heartbeat_events_worker_idx ON agent_worker_heartbeat_events(worker_id, seq);
+    CREATE TRIGGER IF NOT EXISTS agent_workers_no_delete
+      BEFORE DELETE ON agent_workers
+      BEGIN SELECT RAISE(ABORT, 'agent worker records are retained for audit history'); END;
+    CREATE TRIGGER IF NOT EXISTS agent_worker_heartbeat_events_no_update
+      BEFORE UPDATE ON agent_worker_heartbeat_events
+      BEGIN SELECT RAISE(ABORT, 'agent worker heartbeat events are append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS agent_worker_heartbeat_events_no_delete
+      BEFORE DELETE ON agent_worker_heartbeat_events
+      BEGIN SELECT RAISE(ABORT, 'agent worker heartbeat events are append-only'); END;
+    PRAGMA user_version = 3;
   `);
 }
 
