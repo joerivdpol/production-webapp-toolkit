@@ -135,7 +135,8 @@
     "agent:evaluate": "node scripts/agent-evaluation-corpus.js",
     "agent:repair": "node scripts/agent-repair.js",
     "agent:docs": "node scripts/agent-documentation.js",
-    "agent:contract-impact": "node scripts/agent-contract-impact.js"
+    "agent:contract-impact": "node scripts/agent-contract-impact.js",
+    "agent:dependency-maintenance": "node scripts/agent-dependency-maintenance.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
