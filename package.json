@@ -113,7 +113,8 @@
     "ecosystem:dashboard": "node scripts/ecosystem-dashboard.js",
     "ecosystem:history": "node scripts/compare-ecosystem-history.js",
     "report:plan": "node scripts/scheduled-reporting.js",
-    "policy:severity": "node scripts/severity-policy.js"
+    "policy:severity": "node scripts/severity-policy.js",
+    "audit:agent-safety": "node scripts/audit-agent-safety.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
