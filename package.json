@@ -125,7 +125,8 @@
     "agent:route": "node scripts/agent-route.js",
     "agent:registry": "node scripts/agent-task-registry.js",
     "agent:lease": "node scripts/agent-worker-lease.js",
-    "agent:role-policy": "node scripts/agent-role-policy.js"
+    "agent:role-policy": "node scripts/agent-role-policy.js",
+    "agent:model": "node scripts/agent-local-model.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
