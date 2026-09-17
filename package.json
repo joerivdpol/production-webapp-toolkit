@@ -105,7 +105,8 @@
     "dr:contract": "node scripts/disaster-recovery-contract.js",
     "audit:dr-readiness": "node scripts/audit-disaster-recovery.js",
     "rollback:contract": "node scripts/rollback-readiness-contract.js",
-    "audit:rollback-readiness": "node scripts/audit-rollback-readiness.js"
+    "audit:rollback-readiness": "node scripts/audit-rollback-readiness.js",
+    "manifest:validate": "node scripts/repository-manifest.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
