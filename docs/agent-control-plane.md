@@ -58,6 +58,21 @@ bun run agent:lease -- expire --db /private/state/agent-tasks.sqlite --at 2026-0
 
 Lease state is orchestration evidence, not repository or production truth. It does not create a worktree, start a model, execute a command, grant filesystem access, merge code, deploy, or mutate production. Exclusive path-level write scopes remain future work; v1 deliberately establishes the stricter repository-level writer boundary first.
 
+## Agent Role Policy v1
+
+`bun run agent:role-policy` validates a separate safety policy for agent roles. Role policy is intentionally distinct from Agent Routing Policy: routing chooses an eligible worker/model, while role policy caps what the task is allowed to request. When both are supplied to `agent:route`, a task must satisfy both layers; role policy can therefore only restrict routing, never widen it.
+
+A role declares maximum task risk, maximum filesystem/shell/network authority, and write posture. `READ_ONLY` roles must use `writeMode: NONE`. Any role that permits `WORKTREE_WRITE` must use `writeMode: LEASED_WORKTREE`; unleased write authority is not representable in Agent Role Policy v1. Omitting a canonical role from a policy disables that role.
+
+The public template `templates/agent-role-policy.v1.json` enables all eight canonical roles with a conservative baseline. Diagnose, review, contract, and incident are read-only. Reproduce, repair, and docs may write only in leased worktrees. Dependency analysis remains read-only and is the only default role whose maximum network authority is read-only rather than none. Operators may supply stricter private policies without putting private infrastructure or business truth in the public repository.
+
+```sh
+bun run agent:role-policy -- --task ./agent-task.json --policy ./templates/agent-role-policy.v1.json --json
+bun run agent:route -- --task ./agent-task.json --policy ./routing-policy.json --role-policy ./templates/agent-role-policy.v1.json --worker ./worker.json --evaluated-at 2026-09-17T12:30:00Z --json
+```
+
+Role-policy PASS is not execution authority. A write task still needs Worker Lease v1 and an isolated worktree execution layer. Merge, deployment, payment, booking, migration, and production mutation remain outside Agent Task v1 authority.
+
 ## Initial roles
 
 The initial safe roles are `diagnose`, `reproduce`, and `review`. They are intended to establish evidence quality before source-modifying automation is enabled. `repair`, `docs`, `contract`, `dependency`, and `incident` are reserved Agent Task v1 roles for later phases with separate policy and execution boundaries.
