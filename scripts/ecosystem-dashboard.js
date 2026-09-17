@@ -8,6 +8,7 @@ import { inspectOrganizationPolicy, validateOrganizationPolicy } from "./organiz
 import { BUILTIN_POLICY_PACKS, inspectManifestPolicyPack } from "./policy-packs.js";
 import { validateRepositoryCheckEvidence } from "./repository-check-evidence.js";
 import { validateRepositoryManifest } from "./repository-manifest.js";
+import { resolveSeverityPolicy, validateSeverityPolicy } from "./severity-policy.js";
 import { isAbsoluteIsoTimestamp } from "./runtime-evidence.js";
 
 const MAX_JSON_BYTES = 4 * 1024 * 1024;
@@ -42,21 +43,22 @@ export function validateEcosystemDashboardConfig(value) {
   const generatedAt = text(value.generatedAt, 128);
   if (!generatedAt || !isAbsoluteIsoTimestamp(generatedAt)) errors.push({ id: "generated-at-invalid", detail: "generatedAt must be an absolute ISO timestamp" });
 
-  /** @type {Array<{manifestFile:string,evidenceFile:string,organizationPolicyFile?:string}>} */
+  /** @type {Array<{manifestFile:string,evidenceFile:string,organizationPolicyFile?:string,severityPolicyFile?:string}>} */
   const repositories = [];
   if (!Array.isArray(value.repositories) || value.repositories.length === 0 || value.repositories.length > 512) {
     errors.push({ id: "repositories-invalid", detail: "repositories must be a non-empty bounded array" });
   } else {
     for (const [index, raw] of value.repositories.entries()) {
       if (!object(raw)) { errors.push({ id: "repository-entry-invalid", detail: `repositories[${index}] must be an object` }); continue; }
-      unknown(raw, ["manifestFile", "evidenceFile", "organizationPolicyFile"], "repository-entry", errors);
+      unknown(raw, ["manifestFile", "evidenceFile", "organizationPolicyFile", "severityPolicyFile"], "repository-entry", errors);
       const manifestFile = text(raw.manifestFile), evidenceFile = text(raw.evidenceFile);
       const organizationPolicyFile = raw.organizationPolicyFile === undefined ? null : text(raw.organizationPolicyFile);
-      if (!manifestFile || !evidenceFile || (raw.organizationPolicyFile !== undefined && !organizationPolicyFile)) {
-        errors.push({ id: "repository-entry-fields-invalid", detail: `repositories[${index}] requires manifestFile, evidenceFile, and optional organizationPolicyFile` });
+      const severityPolicyFile = raw.severityPolicyFile === undefined ? null : text(raw.severityPolicyFile);
+      if (!manifestFile || !evidenceFile || (raw.organizationPolicyFile !== undefined && !organizationPolicyFile) || (raw.severityPolicyFile !== undefined && !severityPolicyFile)) {
+        errors.push({ id: "repository-entry-fields-invalid", detail: `repositories[${index}] requires manifestFile, evidenceFile, and optional organizationPolicyFile/severityPolicyFile` });
         continue;
       }
-      repositories.push({ manifestFile, evidenceFile, ...(organizationPolicyFile ? { organizationPolicyFile } : {}) });
+      repositories.push({ manifestFile, evidenceFile, ...(organizationPolicyFile ? { organizationPolicyFile } : {}), ...(severityPolicyFile ? { severityPolicyFile } : {}) });
     }
   }
   if (errors.length > 0 || !generatedAt) return { valid: false, config: null, errors };
@@ -76,12 +78,12 @@ function resolveInput(baseDir, filename) {
   return path.isAbsolute(filename) ? path.resolve(filename) : path.resolve(baseDir, filename);
 }
 
-/** @param {string[]} ids @param {"required"|"advisory"} requirement @param {Map<string,string>} observed */
-function evaluateChecks(ids, requirement, observed) {
-  return ids.map((id) => {
-    const status = observed.get(id) ?? "MISSING";
-    const impact = status === "PASS" ? "PASS" : requirement === "required" && status === "FAIL" ? "FAIL" : "WARN";
-    return { id, requirement, status, impact };
+/** @param {Array<{id:string,requirement:"required"|"advisory",impacts:Record<string,"WARN"|"FAIL">}>} policies @param {Map<string,string>} observed */
+function evaluateChecks(policies, observed) {
+  return policies.map((policy) => {
+    const status = observed.get(policy.id) ?? "MISSING";
+    const impact = status === "PASS" ? "PASS" : policy.impacts[status] ?? "WARN";
+    return { id: policy.id, requirement: policy.requirement, status, impact };
   });
 }
 
@@ -164,18 +166,26 @@ function inspectEntry(baseDir, entry, index, generatedAt) {
     };
   }
 
+  /** @type {any} */
+  let severityPolicy = { version: 1, rules: [] };
+  if (entry.severityPolicyFile) {
+    const rawSeverity = readJsonBounded(resolveInput(baseDir, entry.severityPolicyFile));
+    if (!rawSeverity) return { ...technicalFailure(index, "severity policy cannot be read safely"), repository: manifest.manifest.repository.id, profile: manifest.manifest.profile };
+    const validatedSeverity = validateSeverityPolicy(rawSeverity);
+    if (!validatedSeverity.valid || !validatedSeverity.policy) return { ...technicalFailure(index, "severity policy is invalid"), repository: manifest.manifest.repository.id, profile: manifest.manifest.profile };
+    severityPolicy = validatedSeverity.policy;
+  }
+  const severityReport = resolveSeverityPolicy(effective, severityPolicy);
   const observed = new Map(evidence.evidence.checks.map((item) => [item.id, item.status]));
-  const checks = [
-    ...evaluateChecks(effective.required, "required", observed),
-    ...evaluateChecks(effective.advisory, "advisory", observed),
-  ].sort((a, b) => `${a.requirement}:${a.id}`.localeCompare(`${b.requirement}:${b.id}`));
+  const checks = evaluateChecks(severityReport.effective.checks, observed)
+    .sort((a, b) => `${a.requirement}:${a.id}`.localeCompare(`${b.requirement}:${b.id}`));
   const scopedIds = new Set(checks.map((item) => item.id));
   const unscopedChecks = evidence.evidence.checks.filter((item) => !scopedIds.has(item.id));
   const required = categorySummary(checks, "required"), advisory = categorySummary(checks, "advisory");
   const futureEvidence = Date.parse(evidence.evidence.evidence.collectedAt) > Date.parse(generatedAt);
   const impactFail = checks.some((item) => item.impact === "FAIL");
   const impactWarn = checks.some((item) => item.impact === "WARN") || futureEvidence;
-  const policyFailed = policyReport.overallStatus === "FAIL";
+  const policyFailed = policyReport.overallStatus === "FAIL" || severityReport.overallStatus === "FAIL";
 
   return {
     entry: index,
@@ -183,7 +193,7 @@ function inspectEntry(baseDir, entry, index, generatedAt) {
     profile: manifest.manifest.profile,
     policySource,
     evidence: evidence.evidence.evidence,
-    policyStatus: policyReport.overallStatus,
+    policyStatus: policyFailed ? "FAIL" : "PASS",
     evidenceTimeStatus: futureEvidence ? "FUTURE" : "VALID",
     checks,
     unscopedChecks,

@@ -1907,3 +1907,41 @@ bun run report:plan -- \
 The planner creates a deterministic SHA256 event id bound to schedule metadata, evaluation time, current/previous snapshot times, trigger reasons, and sink ids. That id is intended for downstream idempotency; the toolkit itself does not mark events delivered or persist delivery state. A current dashboard newer than the explicit evaluation time, an invalid historical ordering, or invalid/tampered dashboard input fails closed.
 
 This capability is offline and read only. It does not send notifications, store credentials, contact providers, schedule operating-system jobs, or mutate report evidence.
+
+### Monotone severity policy
+
+`bun run policy:severity` resolves Severity Policy v1 above the effective Repository Manifest/public policy-pack policy and optional private Organization Policy v1. Rules may add a check, promote an advisory check to required, or escalate the impact of observed `WARN`, `FAIL`, `UNVERIFIED`, and `MISSING` states from `WARN` to `FAIL`.
+
+The canonical baseline remains unchanged when no severity policy is configured: required `FAIL` is blocking; required `WARN`, `UNVERIFIED`, and `MISSING` are warnings; all advisory non-pass states are warnings. Severity configuration is monotone. A required check cannot be downgraded to advisory, and a status whose canonical impact is `FAIL` cannot be weakened to `WARN`. Weakening attempts are explicit policy failures and the stricter inherited requirement/impact is retained.
+
+```json
+{
+  "version": 1,
+  "rules": [
+    {
+      "check": "seo",
+      "requirement": "required",
+      "impacts": { "warn": "FAIL", "missing": "FAIL" }
+    },
+    {
+      "check": "performance",
+      "requirement": "advisory",
+      "impacts": { "fail": "FAIL" }
+    }
+  ]
+}
+```
+
+```sh
+bun run policy:severity -- \
+  --manifest-file ./toolkit-manifest.json \
+  --severity-policy-file ./severity-policy.json \
+  --organization-policy-file /private/path/organization-policy.json \
+  --json
+```
+
+Ecosystem Dashboard v1 accepts an optional `severityPolicyFile` per repository. Required/advisory classification and impact are resolved from canonical policy plus Severity Policy; check evidence itself still carries no severity. A valid explicit escalation can therefore make an advisory `FAIL` blocking or make `MISSING` evidence blocking. A weakening conflict makes repository policy status `FAIL`. Invalid severity input is isolated as a technical repository failure.
+
+Historical dashboard validation permits impacts that are stricter than the canonical baseline while continuing to reject weaker impacts. This keeps configured severity compatible with history comparison without allowing a stored snapshot to silently relax required controls.
+
+The severity engine is offline and read only. It does not execute checks, mutate manifests or organization policy, contact providers, or infer business-specific severity.
