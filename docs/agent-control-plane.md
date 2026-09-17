@@ -326,9 +326,36 @@ The task must use role `contract`, filesystem `READ_ONLY`, shell `NONE`, and net
 
 The public `templates/agent-contract-impact-input.v1.json` is synthetic. Real repository commits, contract versions, consumer/provider paths, evidence, organization policy, and model mappings remain private operator inputs.
 
+## Dependency Maintenance Agent v1
+
+`bun run agent:dependency-maintenance` is a read-only analysis layer for dependency changes already proposed by deterministic update tooling. It never invokes a package manager, changes a manifest or lockfile, installs packages, opens or merges a pull request, or deploys an update.
+
+Dependency Maintenance Input v1 binds one dependency Agent Task to an exact repository commit, one declared generator run, explicit changed manifest/lockfile paths, dependency changes, and evidence. Generator type may be `RENOVATE`, `DEPENDABOT`, or `OTHER_DETERMINISTIC`. Its `authenticated` boolean is trust metadata only and never establishes update correctness, compatibility, or approval.
+
+Every dependency change declares ecosystem, package name, exact before/after version strings, relationship, manifest path, and optional lockfile path. Manifest and lockfile paths must already appear in `changedPaths`. Every change must also be covered by explicit evidence before a model can run.
+
+The toolkit itself classifies exact semantic-version transitions as `PATCH`, `MINOR`, `MAJOR`, `DOWNGRADE`, or `SAME`; non-exact versions are `NON_SEMVER`. Unchanged exact versions are rejected as update input. The model cannot supply or override `updateClass`.
+
+Model output must analyze every declared change exactly once. Each update and concern cites evidence already bound to that same change. Verification proposals are limited to `INSPECT`, `TEST`, or `QUERY`. Raw evidence summaries and the original changed-path list are not copied into normalized output.
+
+```sh
+bun run agent:dependency-maintenance -- \
+  --task /private/tasks/dependency.json \
+  --role-policy /private/policy/agent-roles.json \
+  --input /private/tasks/dependency-maintenance-input.json \
+  --model-config /private/config/model-backends.json \
+  --backend worker-local \
+  --model dependency-local \
+  --json
+```
+
+Dependency Maintenance v1 requires role `dependency`, filesystem `READ_ONLY`, shell `NONE`, and network `NONE`; no worktree lease is used. Normalized output always keeps package mutation, source mutation, execution, approval, merge, deployment, and production mutation authority false. A later deterministic integration such as Renovate may create update proposals, but this agent cannot perform or authorize that work.
+
+The public `templates/agent-dependency-maintenance-input.v1.json` is synthetic. Real package names, versions, repository commits, updater identities, evidence, and model mappings remain private operator inputs.
+
 ## Initial roles
 
-The initial safe roles are `diagnose`, `reproduce`, and `review`. They are intended to establish evidence quality before source-modifying automation is enabled. `repair`, `docs`, `contract`, `dependency`, and `incident` are reserved Agent Task v1 roles for later phases with separate policy and execution boundaries.
+The implemented agent roles now include `diagnose`, `reproduce`, `review`, `repair`, `docs`, `contract`, and `dependency`, each with separate policy and authority boundaries. `incident` remains reserved for a later runtime-intelligence phase.
 
 ## Authority model
 

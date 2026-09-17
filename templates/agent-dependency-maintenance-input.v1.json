@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "taskId": "task:dependency-example",
+  "repository": {
+    "id": "example-webapp",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "generator": {
+    "id": "updater-run-example",
+    "type": "RENOVATE",
+    "authenticated": false
+  },
+  "changes": [
+    {
+      "id": "change-runtime-library",
+      "ecosystem": "NPM",
+      "package": "example-runtime-library",
+      "fromVersion": "1.2.3",
+      "toVersion": "1.3.0",
+      "relationship": "PRODUCTION",
+      "manifestPath": "package.json",
+      "lockfilePath": "bun.lock"
+    }
+  ],  "changedPaths": ["package.json", "bun.lock"],
+  "evidence": [
+    {
+      "id": "updater-evidence",
+      "source": "deterministic-updater",
+      "status": "INFO",
+      "summary": "The deterministic updater proposed the exact package version transition.",
+      "changeIds": ["change-runtime-library"],
+      "path": "package.json"
+    }
+  ],
+  "unknowns": [
+    "Package release-note and runtime compatibility claims are not supplied by this public fixture."
+  ]
+}

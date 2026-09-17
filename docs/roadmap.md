@@ -231,7 +231,8 @@ This phase adds a generic agent orchestration layer above the deterministic tool
 * v2.1 Agent control plane implementation is complete and merged.
 * Repair Agent v1 with proposal-first output, exact context hashes, linked-worktree checks, private path/check policy, and LOW-risk leased worktree apply only when explicitly enabled: merged.
 * Documentation Agent v1 with document-only proposal scope, hard human-review protection for AGENTS/governance/policy/security/.github paths, proposal-first behavior, and LOW-risk leased worktree apply for ordinary docs: merged.
-* Cross Repository Contract Impact Agent v1 with canonical contract-audit composition, explicit provider-consumer edges, evidence/path binding, deterministic mismatch/drift/missing kinds, and no canonical-version inference: implementation complete on the active capability branch.
+* Cross Repository Contract Impact Agent v1 with canonical contract-audit composition, explicit provider-consumer edges, evidence/path binding, deterministic mismatch/drift/missing kinds, and no canonical-version inference: merged.
+* Dependency Maintenance Agent v1 with deterministic exact-version classification, full change/evidence coverage, read-only model analysis, and no package-manager or update execution authority: implementation complete on the active capability branch.
 * Remaining v2.2+ phases remain open.
 
 71. Add Agent Task Contract v1 with explicit repository commit, role, risk, scope, required checks, and bounded authority.
