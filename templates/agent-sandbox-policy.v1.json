@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "repository": "example-webapp",
+  "backend": "BWRAP",
+  "network": "NONE",
+  "runtimeReadOnlyBinds": [],
+  "commands": [
+    {
+      "id": "environment-summary",
+      "argv": ["/usr/bin/env"]
+    }
+  ],
+  "limits": {
+    "wallTimeMs": 60000,
+    "cpuSeconds": 30,
+    "addressSpaceBytes": 4294967296,
+    "fileSizeBytes": 16777216,
+    "openFiles": 256,
+    "processes": 64,
+    "maxOutputBytes": 1048576,
+    "maxWorkspaceBytes": 1073741824,
+    "maxWorkspaceFiles": 100000
+  }
+}
