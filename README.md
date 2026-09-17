@@ -1690,3 +1690,45 @@ bun run audit:dr-readiness -- \
 This is machine-readable ownership and runbook-file-presence evidence only. It does not prove access to infrastructure, availability of secret material, DNS authority, deployment capability, rollback correctness, restore completeness, runbook quality, or operator competence. The public contract contains no secret values or application-specific recovery rules.
 
 The audit is local and read only. It does not execute recovery procedures, inspect runbook contents, access DNS or infrastructure providers, read runtime environment values, or mutate repository or production state.
+
+### Rollback readiness contract and audit
+
+`bun run rollback:contract` validates Rollback Readiness Contract v1. The contract declares a repository-relative rollback runbook, the exact rollback command that must be documented in that runbook, and whether schema migration compatibility is not applicable or must be checked against explicit migration history. The command is documentation evidence only; the toolkit never executes it.
+
+`bun run audit:rollback-readiness` composes existing canonical evidence instead of inventing a second release truth model. It requires current and previous Artifact Provenance Contract v1 documents, exact Change Surface Evidence v1 for the previous-to-current release transition, and an explicit local copy of the previous release artifact. The audit verifies that current and previous releases are distinct, bind the same deployment target and runtime identity, that change base/head commits match those releases, and that the available previous artifact SHA256 matches previous provenance.
+
+For migration `CHECK` mode, the contract supplies explicit migration roots and an applied-history manifest path. The audit delegates migration discovery and history integrity to the canonical migration-safety engine. New migrations require an explicit `COMPATIBLE` assessment, and automatically recognized destructive or hard-to-reverse release migrations such as destructive DDL/data removal, unbounded deletes, irreversible enum additions, and column type rewrites block rollback readiness even when the caller claims compatibility. Broader schema compatibility remains caller-declared rather than inferred.
+
+```json
+{
+  "version": 1,
+  "rollback": {
+    "runbookPath": "docs/rollback.md",
+    "command": "bun run deploy:rollback"
+  },
+  "migration": {
+    "mode": "CHECK",
+    "compatibility": "COMPATIBLE",
+    "roots": ["supabase/migrations"],
+    "appliedManifestPath": "evidence/applied-migrations.json"
+  }
+}
+```
+
+```sh
+bun run rollback:contract -- --file ./rollback-contract.json --json
+bun run audit:rollback-readiness -- \
+  --root /path/to/repository \
+  --contract ./rollback-contract.json \
+  --current-provenance-file ./current-provenance.json \
+  --previous-provenance-file ./previous-provenance.json \
+  --change-evidence-file ./release-change.json \
+  --previous-artifact-file /path/to/previous-artifact.tgz \
+  --json
+```
+
+The previous artifact is hashed directly from the caller-supplied regular non-symlink file. The configured rollback runbook is bounded and read only; the audit checks that the exact configured command appears in it but never copies runbook contents into reports. When a broad database change surface exists while the contract explicitly declares no schema migration, readiness remains `WARN` because absence of a migration is not independently established.
+
+A passing report does not execute rollback, deploy artifacts, modify a database, or prove that a caller-declared schema compatibility assessment is semantically correct. It proves the explicit release identity, artifact availability, documentation binding, migration-history integrity, and conservative rollback-hazard checks represented by the supplied evidence.
+
+The capability is local and read only. It has no network, shell-execution, provider-mutation, runtime-environment, or production-write surface.

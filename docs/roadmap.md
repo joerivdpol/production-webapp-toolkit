@@ -122,8 +122,9 @@ Core principles:
 * Booking Integrity Evidence v1 plus optional booking integrity profile for atomic-claim structure, duplicate prevention, expiry, release, timezone and retry controls with commit-bound concurrency outcomes: merged.
 * Policy-driven scheduled job audit for explicit timezone, scheduler registration, locking/overlap posture, timeout, retries, and dead-letter handling: merged.
 * Backup Readiness Evidence v1 plus deterministic backup/restore readiness audit for recency, encryption policy, restore instructions, and restore-test evidence: merged.
-* Disaster Recovery Contract v1 and deterministic readiness audit for source, database, secrets, DNS, deployment, rollback, and restore ownership/runbook coverage: implementation complete on the active capability branch.
-* Rollback readiness and the remaining operational assurance capabilities remain open.
+* Disaster Recovery Contract v1 and deterministic readiness audit for source, database, secrets, DNS, deployment, rollback, and restore ownership/runbook coverage: merged.
+* Rollback Readiness Contract v1 and deterministic release rollback audit binding current/previous artifact provenance, exact Change Surface Evidence, prior artifact SHA256 availability, documented rollback command, and canonical migration safety: implementation complete on the active capability branch.
+* v1.3 runtime-assurance capabilities are complete pending merge of the active rollback-readiness capability.
 
 35. Add runtime evidence collectors as separate adapters that emit Runtime Evidence Contract documents.
 36. Support local Git checkout evidence while clearly labeling it as checkout evidence, not process identity.
