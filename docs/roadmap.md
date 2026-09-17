@@ -211,3 +211,62 @@ It does not automatically change production infrastructure, GitHub protection se
 8. Runtime collectors and runtime health only after the reporting chain is stable.
 
 Each capability should land in a focused pull request with synthetic tests, public repository safety, typecheck, lint, full tests, build validation, and explicit documentation of trust and side effect boundaries.
+
+## v2.1 Agent control plane
+
+This phase adds a generic agent orchestration layer above the deterministic toolkit. The toolkit remains the independent source of engineering checks and policy decisions. Agent output never replaces canonical evidence.
+
+71. Add Agent Task Contract v1 with explicit repository commit, role, risk, scope, required checks, and bounded authority.
+72. Add Agent Worker Contract v1 with explicit heartbeat time, resources, model inventory, capabilities, load, and read/write capacity.
+73. Add deterministic Agent Route v1 selection using explicit evaluation time, heartbeat freshness, task authority, role policy, worker capability, and model class preference.
+74. Add a persistent SQLite task registry with task state transitions, append-only events, retries, and resumable task identity.
+75. Add worker leases so only one writing agent owns a repository/worktree scope at a time and concurrent sessions cannot silently duplicate the same task.
+76. Add versioned role policies for diagnose, reproduce, review, repair, docs, contract, dependency, and incident agents.
+77. Add a local-model adapter with explicit provider endpoints and no implicit cloud fallback.
+78. Add persistent-worker discovery and optional compute-worker registration without treating stale heartbeats as online truth.
+79. Add a diagnosis agent that produces evidence-backed hypotheses and proposed verification steps without modifying source.
+80. Add a reproduction agent that creates isolated failing regression tests without weakening or skipping existing checks.
+81. Add an independent review agent that searches for counterexamples and regression gaps without inheriting another agent's conclusion as truth.
+82. Add an agent evaluation corpus with known defects, expected evidence, scope boundaries, and measurable pass/fail outcomes.
+
+## v2.2 Safe coding automation
+
+83. Add a repair agent restricted to isolated worktrees, explicit allowed paths, required checks, and proposal-only output until policy authorizes low-risk writes.
+84. Add a documentation agent for command, path, release-note, and architecture-reference drift; AGENTS and policy changes remain separately reviewed.
+85. Add a cross-repository contract-impact agent that maps explicit consumers/providers and proposes coordinated compatibility work without inventing canonical business rules.
+86. Add a dependency-maintenance agent that explains and validates mechanical update PRs while package updates remain delegated to deterministic tooling.
+87. Add a bounded MCP server exposing typed toolkit operations instead of a general unrestricted shell.
+88. Add task-scoped worktree sandboxes with filesystem containment, resource limits, and deterministic cleanup.
+89. Add signed evidence verification so authentication is established cryptographically instead of trusting boolean metadata alone.
+90. Add reusable research bundles containing exact commit, tool versions, sanitized evidence, commands, and reproduction metadata.
+91. Add a traceable repository impact graph for APIs, contracts, canonical modules, tests, routes, and consumers with source/commit provenance for every edge.
+92. Add an operator task dashboard for queued, leased, running, blocked, review-required, completed, and superseded work without creating a second audit truth model.
+
+## v2.3 Runtime and ecosystem intelligence
+
+93. Add an incident-analysis agent over explicitly supplied sanitized runtime evidence, release identity, errors, and health metrics; no restart, rollback, or provider mutation authority.
+94. Add an OpenTelemetry evidence adapter for bounded traces, metrics, and logs while preserving runtime evidence identity and privacy boundaries.
+95. Add automated correlation between incidents, releases, dependency changes, contract changes, and prior known failures as hypotheses with source references.
+96. Add resource and model-quality telemetry for agent latency, accepted proposals, rejected proposals, reopened defects, review effort, CPU/GPU time, and token usage.
+97. Add model-routing evaluation so small local models handle classification/summarization and stronger workers are used only when measured quality requires them.
+
+## v2.4 Verification and maintenance integrations
+
+98. Add Playwright planner/generator integration for isolated browser regression planning; generated tests cannot silently skip broken functionality.
+99. Add fast-check property-based testing adapters for validators, policies, state transitions, numeric invariants, and other explicit properties.
+100. Add StrykerJS mutation-testing integration to measure whether important tests actually detect code changes.
+101. Add Testcontainers integration for disposable database/service integration environments with synthetic data only.
+102. Add Pact consumer/provider contract testing as an executable complement to static API and cross-repository contract audits.
+103. Add Renovate integration for deterministic dependency-update PR creation with agent explanation and policy-driven review.
+104. Add Semgrep evidence adapters as an optional static-analysis source without replacing toolkit-native checks.
+105. Add Promptfoo evaluation suites for comparing local models, prompts, agent roles, and tool policies against the fixed agent evaluation corpus.
+106. Add Cosign/Sigstore verification adapters for signed release and agent evidence, binding trusted issuers/identities through explicit private policy.
+
+### Agent product boundary
+
+* The deterministic toolkit remains authoritative for checks, contracts, evidence validation, and deployment-gate decisions.
+* Agents may investigate, reproduce, review, and propose. Write authority is separately scoped and never implies merge, deployment, payment, booking, migration, or production authority.
+* Missing or stale evidence cannot be repaired by model confidence.
+* Agents cannot weaken tests, policy, safety checks, or canonical business constraints merely to obtain a passing result.
+* Public code remains provider-neutral; hostnames, credentials, private repositories, organization policy, and model endpoints stay in private deployment configuration.
+* Always-on control-plane operation and optional compute workers are separate from repository truth. Worker availability is explicit heartbeat evidence, not an assumption.
