@@ -628,6 +628,34 @@ bun run agent:workflow:plan -- \
 
 This separation prevents an agent planner from silently crossing canonical business truth, migrations, secrets, deployment, or other private production boundaries. The public toolkit contains the classification engine only; organization-specific protected paths stay in private policy files.
 
+### Release Evidence Bundle v1
+
+`bun run release:evidence:bundle` creates a compact machine-readable evidence index for one exact release source commit. It validates canonical CI Evidence, Artifact Provenance, Runtime Evidence, Runtime Health Evidence plus policy, Vulnerability Evidence plus policy, and the toolkit's CycloneDX 1.7 dependency snapshot. The bundle hashes the exact input bytes instead of copying underlying evidence payloads. Optional private JSON policy files can be added as caller-supplied `id=path` entries and are likewise represented only by id and SHA256.
+
+Cross-contract checks require CI, artifact provenance, runtime deployment, and CycloneDX to bind the same source commit; the CycloneDX artifact SHA256 must equal the built artifact hash; runtime health identity must equal runtime deployment identity; vulnerability package identities must exist at the exact version in the dependency snapshot; and no canonical evidence timestamp may be later than the bundle creation time. The vulnerability and runtime-health policies must use exactly the bundle `createdAt` evaluation time.
+
+Bundle creation must run from a Git checkout whose `HEAD` equals the release source commit. The caller also supplies the explicit previous baseline commit. The existing production-baseline audit verifies both commits locally and records their relationship and ahead/behind distance; a newer release being ahead of the previous baseline is descriptive evidence, not itself a failure.
+
+```sh
+bun run release:evidence:bundle -- \
+  --root /path/to/repository \
+  --source-commit <full-release-sha> \
+  --baseline-commit <full-previous-sha> \
+  --created-at 2026-09-17T10:00:00Z \
+  --ci-evidence-file ./ci.json \
+  --sbom-file ./sbom.json \
+  --vulnerability-evidence-file ./vulnerabilities.json \
+  --vulnerability-policy-file /private/vulnerability-policy.json \
+  --artifact-provenance-file ./provenance.json \
+  --runtime-evidence-file ./runtime.json \
+  --runtime-health-evidence-file ./runtime-health.json \
+  --runtime-health-policy-file /private/runtime-health-policy.json \
+  --policy-file organization-policy=/private/organization-policy.json \
+  --json
+```
+
+Bundle validity is intentionally separate from release approval. A coherent bundle can contain `FAIL` or `WARN` results from vulnerability or runtime-health audits; those statuses remain visible in `results` and are not rewritten. `bundleStatus: VALID` means only that evidence files are structurally valid, hash-bound, identity-consistent, time-consistent, and cross-linked. Deployment policy decisions belong to the later policy-driven deployment gate.
+
 ### PostgreSQL security policy audit
 
 `bun run security:snapshot` validates PostgreSQL Security Snapshot v1. `bun run security:snapshot:postgres:collect` collects read-only catalog evidence through an explicit libpq service. `bun run audit:postgres-security` evaluates that evidence against an explicit version 1 project policy.

@@ -116,7 +116,8 @@
     "policy:severity": "node scripts/severity-policy.js",
     "audit:agent-safety": "node scripts/audit-agent-safety.js",
     "audit:diff-architecture": "node scripts/audit-diff-architecture.js",
-    "agent:workflow:plan": "node scripts/controlled-agent-workflow.js"
+    "agent:workflow:plan": "node scripts/controlled-agent-workflow.js",
+    "release:evidence:bundle": "node scripts/release-evidence-bundle.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
