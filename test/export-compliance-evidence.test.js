@@ -10,7 +10,7 @@ import {
   main,
   validateComplianceExportMapping,
 } from "../scripts/export-compliance-evidence.js";
-import { validateReleaseEvidenceBundle } from "../scripts/release-evidence-bundle.js";
+import { REQUIRED_RELEASE_BUNDLE_CHECK_IDS, validateReleaseEvidenceBundle } from "../scripts/release-evidence-bundle.js";
 
 const REQUIRED_EVIDENCE = [
   "ci-evidence",
@@ -55,8 +55,8 @@ function rawBundle() {
       id,
       sha256: String(index + 1).repeat(64).slice(0, 64),
     })),
-    checks: [{ id: "source-checkout-binding", status: "PASS", detail: "source checkout matches" }],
-    summary: { pass: 1, fail: 0 },
+    checks: REQUIRED_RELEASE_BUNDLE_CHECK_IDS.map((id) => ({ id, status: "PASS", detail: `synthetic ${id} passes` })),
+    summary: { pass: REQUIRED_RELEASE_BUNDLE_CHECK_IDS.length, fail: 0 },
     technicalStatus: "PASS",
     bundleStatus: "VALID",
     semantics: "coherent evidence index only",
@@ -187,7 +187,7 @@ test("missing mapped evidence yields INCOMPLETE coverage without inventing contr
 test("INVALID source bundle always produces INCOMPLETE export coverage", () => {
   const raw = rawBundle();
   raw.checks.push({ id: "identity-mismatch", status: "FAIL", detail: "identity mismatch" });
-  raw.summary = { pass: 1, fail: 1 };
+  raw.summary = { pass: REQUIRED_RELEASE_BUNDLE_CHECK_IDS.length, fail: 1 };
   raw.bundleStatus = "INVALID";
   const report = buildComplianceEvidenceExport(bundle(raw), mapping());
   assert.equal(report.release.bundleStatus, "INVALID");

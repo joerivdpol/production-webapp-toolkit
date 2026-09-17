@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { formatRollbackReadiness, inspectRollbackReadiness, main } from "../scripts/audit-rollback-readiness.js";
+import { formatRollbackReadiness, inspectRollbackReadiness, main, validateRollbackReadinessReport } from "../scripts/audit-rollback-readiness.js";
 import { validateArtifactProvenance } from "../scripts/artifact-provenance.js";
 import { validateChangeSurfaceEvidence } from "../scripts/change-surface-evidence.js";
 import { validateRollbackReadinessContract } from "../scripts/rollback-readiness-contract.js";
@@ -81,6 +81,9 @@ test("clean release with available prior artifact documented rollback command an
   assert.equal(report.overallStatus, "PASS");
   assert.equal(report.checks.some((item) => item.id === "previous-artifact-hash" && item.status === "PASS"), true);
   assert.equal(report.checks.some((item) => item.id === "rollback-command-documented" && item.status === "PASS"), true);
+  const validated = validateRollbackReadinessReport(report);
+  assert.equal(validated.valid, true, JSON.stringify(validated.errors));
+  assert.equal(validated.report?.artifacts.currentSha256, CURRENT_HASH);
   assert.match(report.semantics, /does not execute rollback/);
   fs.rmSync(root, { recursive: true, force: true });
 });

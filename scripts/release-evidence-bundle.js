@@ -17,6 +17,26 @@ import { inspectProductionBaseline } from "./audit-production-baseline.js";
 
 const SHA256 = /^[a-fA-F0-9]{64}$/;
 const MAX_EVIDENCE_BYTES = 32 * 1024 * 1024;
+export const REQUIRED_RELEASE_BUNDLE_CHECK_IDS = [
+  "artifact-provenance-coherent",
+  "baseline-resolvable",
+  "ci-evidence-time",
+  "ci-source-commit",
+  "health-runtime-environment",
+  "health-runtime-name",
+  "provenance-evidence-time",
+  "provenance-source-commit",
+  "runtime-evidence-time",
+  "runtime-health-evidence-time",
+  "runtime-source-commit",
+  "sbom-artifact-hash",
+  "sbom-evidence-time",
+  "sbom-source-commit",
+  "source-checkout-binding",
+  "vulnerability-evidence-time",
+];
+const REQUIRED_RELEASE_BUNDLE_CHECK_ID_SET = new Set(REQUIRED_RELEASE_BUNDLE_CHECK_IDS);
+
 const RESERVED_INDEX_IDS = new Set([
   "ci-evidence",
   "dependency-sbom",
@@ -347,6 +367,11 @@ export function validateReleaseEvidenceBundle(value) {
       if (!id || ids.has(id) || !status || !["PASS", "FAIL"].includes(status) || !detail) { errors.push({ id: "check-fields-invalid", detail: "bundle checks must be unique PASS/FAIL findings" }); continue; }
       ids.add(id); checks.push({ id, status, detail });
     }
+  }
+
+  const checkIds = new Set(checks.map((item) => item.id));
+  for (const required of REQUIRED_RELEASE_BUNDLE_CHECK_ID_SET) {
+    if (!checkIds.has(required)) errors.push({ id: "required-coherence-check-missing", detail: `release bundle is missing canonical coherence check ${required}` });
   }
 
   const pass = checks.filter((item) => item.status === "PASS").length, fail = checks.filter((item) => item.status === "FAIL").length;
