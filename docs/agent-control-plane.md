@@ -301,6 +301,31 @@ bun run agent:docs -- apply \
 
 Apply rechecks existing file hashes immediately before write and requires Git status to contain exactly the declared documentation paths. It executes no checks, commit, push, PR, merge, deployment, or production-provider action. Required checks remain explicit obligations for a later sandbox or human-controlled execution layer. The public templates are synthetic; real repository paths, evidence, context, leases, workers, and model mappings remain private operator state.
 
+## Cross Repository Contract Impact Agent v1
+
+`bun run agent:contract-impact` is a read-only coordination layer above the canonical Contract Inventory v1 and Cross Repository Contract Policy v1 engines. It does not choose which repository is canonical and does not decide a target version unless `expectedVersion` already exists in caller-supplied policy.
+
+Contract Impact Input v1 declares exact repository ids and commits, validated contract inventories, the explicit cross-repository policy, bounded evidence, and explicit provider-consumer relationships. Every relationship identifies one contract, provider repository, consumer repository, provider paths, consumer paths, and evidence ids. The union of relationships for a contract must cover every repository named by that policy requirement. Transport, repository discovery, and private business ownership are not inferred.
+
+Before any model call, the toolkit runs the existing deterministic cross-repository contract audit. Its PASS/FAIL findings are converted to stable audit ids and remain authoritative. Version mismatch, consensus drift, and missing contract declarations are therefore deterministic facts rather than model classifications. The model cannot supply `kind` or `expectedVersion`; normalized output derives them from the audit and policy.
+
+Every proposed impact must cite explicit relationship ids, deterministic audit ids, and evidence ids. At least one cited evidence id must already belong to the referenced relationship. Affected paths must come from those explicit provider-consumer edges, and verification proposals are limited to `INSPECT`, `TEST`, or `QUERY` against affected repositories. Every deterministic FAIL must be covered by at least one impact or the model result is rejected.
+
+```sh
+bun run agent:contract-impact -- \
+  --task /private/tasks/contract-impact.json \
+  --role-policy /private/policy/agent-roles.json \
+  --input /private/tasks/contract-impact-input.json \
+  --model-config /private/config/model-backends.json \
+  --backend worker-local \
+  --model contract-local \
+  --json
+```
+
+The task must use role `contract`, filesystem `READ_ONLY`, shell `NONE`, and network `NONE`; no lease is used. Output is descriptive `IMPACTS_REPORTED` or `NO_IMPACTS_REPORTED` only. Execution, source mutation, merge, deployment, production mutation, and model-selected canonical-version authority remain false. Raw evidence summaries and inventory payloads are not copied into normalized output.
+
+The public `templates/agent-contract-impact-input.v1.json` is synthetic. Real repository commits, contract versions, consumer/provider paths, evidence, organization policy, and model mappings remain private operator inputs.
+
 ## Initial roles
 
 The initial safe roles are `diagnose`, `reproduce`, and `review`. They are intended to establish evidence quality before source-modifying automation is enabled. `repair`, `docs`, `contract`, `dependency`, and `incident` are reserved Agent Task v1 roles for later phases with separate policy and execution boundaries.
