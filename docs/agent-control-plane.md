@@ -353,6 +353,32 @@ Dependency Maintenance v1 requires role `dependency`, filesystem `READ_ONLY`, sh
 
 The public `templates/agent-dependency-maintenance-input.v1.json` is synthetic. Real package names, versions, repository commits, updater identities, evidence, and model mappings remain private operator inputs.
 
+## Bounded MCP Server v1
+
+`bun run mcp:serve` exposes a deliberately small read-only Model Context Protocol surface over local stdio using the official MCP v2 server package. This capability is an adapter over existing toolkit validators and auditors; it does not create a second truth model.
+
+The v1 allowlist contains exactly five tools:
+
+* `validate-agent-task`
+* `inspect-agent-role-policy`
+* `validate-contract-inventory`
+* `inspect-cross-repository-contracts`
+* `evaluate-agent-corpus`
+
+Each tool accepts the JSON object it evaluates directly. No tool accepts a local file path, shell command, environment-variable name, URL, credential, Git mutation, package-manager request, merge request, or deployment target. The server itself contains no general filesystem reader/writer, subprocess executor, environment accessor, HTTP transport, or network proxy.
+
+Every tool has a strict Zod v4 input schema and the server marks every tool read-only, non-destructive, idempotent, and closed-world through MCP tool annotations. Inputs are also bounded by serialized byte size, nesting depth, container size, and the underlying canonical toolkit validator. Unknown operations fail closed.
+
+```sh
+bun run mcp:serve
+```
+
+Production v1 transport is stdio only. `@modelcontextprotocol/server` is exactly pinned at `2.0.0`; `zod` is exactly pinned at `4.6.5`. `@modelcontextprotocol/client` is a test-only dependency used with the official in-memory transport to verify real MCP `tools/list` and `tools/call` behavior.
+
+The stdio entry uses the SDK's dual-era compatibility path so current MCP clients can connect without adding a public HTTP endpoint. Adding Streamable HTTP, authentication, remote transport, more toolkit operations, or any write-capable MCP tool requires a separate capability with explicit security policy and tests.
+
+The MCP adapter never authorizes execution, source mutation, package mutation, merge, deployment, payment, booking, migration, or production mutation. The deterministic function called by a tool remains authoritative for its own result semantics.
+
 ## Initial roles
 
 The implemented agent roles now include `diagnose`, `reproduce`, `review`, `repair`, `docs`, `contract`, and `dependency`, each with separate policy and authority boundaries. `incident` remains reserved for a later runtime-intelligence phase.
