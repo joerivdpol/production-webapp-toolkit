@@ -110,7 +110,8 @@
     "policy:resolve": "node scripts/policy-packs.js",
     "policy:organization": "node scripts/organization-policy.js",
     "check:evidence": "node scripts/repository-check-evidence.js",
-    "ecosystem:dashboard": "node scripts/ecosystem-dashboard.js"
+    "ecosystem:dashboard": "node scripts/ecosystem-dashboard.js",
+    "ecosystem:history": "node scripts/compare-ecosystem-history.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
