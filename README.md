@@ -592,6 +592,24 @@ bun run audit:agent-safety -- \
 
 This is document-binding evidence only. A passing result does not prove that an agent read, understood, or obeyed the referenced instructions, and it does not authorize secrets access, migration changes, deployment, provider actions, or other production mutations. Repository-specific canonical truth and organization policy can remain outside the public toolkit.
 
+### Diff-aware architecture policy audit
+
+`bun run audit:diff-architecture` evaluates private architecture policy packs only against files changed between two explicit full Git commit ids. Repository Manifest v1 supplies the public profile and capability declarations that select applicable private packs. Unchanged legacy files are deliberately outside the evaluation surface, so adopting a stricter architecture policy does not silently turn pre-existing debt into a new release failure.
+
+Private packs can define three structural rule types. `forbid-change` marks matching changed paths as warning or failure. `forbid-import` rejects configured JavaScript/TypeScript module imports in matching changed source files. `require-import` requires at least one configured module import in each matching changed source file, enabling private canonical-module boundaries without hardcoding business rules in the public toolkit. Import evidence includes static imports, export-from declarations, literal dynamic imports, and literal CommonJS `require` calls.
+
+```sh
+bun run audit:diff-architecture -- \
+  --root /path/to/repository \
+  --manifest ./toolkit-manifest.json \
+  --policy /private/path/architecture-policy.json \
+  --base-commit <full-base-sha> \
+  --head-commit <full-head-sha> \
+  --json
+```
+
+The audit reads changed-file names through read-only Git diff and reads import-rule source from the exact head commit rather than the mutable worktree. Deleted files cannot introduce new import violations, while `forbid-change` can still make deletion itself visible. Non-JavaScript/TypeScript files targeted by import rules and syntactically malformed changed source fail closed. A passing result is structural diff evidence only; import presence does not prove runtime call paths, data flow, business-rule correctness, or control-flow semantics.
+
 ### PostgreSQL security policy audit
 
 `bun run security:snapshot` validates PostgreSQL Security Snapshot v1. `bun run security:snapshot:postgres:collect` collects read-only catalog evidence through an explicit libpq service. `bun run audit:postgres-security` evaluates that evidence against an explicit version 1 project policy.
