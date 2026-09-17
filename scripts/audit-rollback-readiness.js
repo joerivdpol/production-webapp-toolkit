@@ -9,8 +9,21 @@ import { validateArtifactProvenance } from "./artifact-provenance.js";
 import { inspectMigrationSafety } from "./audit-migration-safety.js";
 import { validateChangeSurfaceEvidence } from "./change-surface-evidence.js";
 import { validateRollbackReadinessContract } from "./rollback-readiness-contract.js";
+import { isFullObjectId } from "./runtime-evidence.js";
 
 const MAX_RUNBOOK_BYTES = 2 * 1024 * 1024;
+export const REQUIRED_ROLLBACK_REPORT_BASE_CHECK_IDS = [
+  "current-provenance-hash",
+  "previous-provenance-hash",
+  "distinct-release",
+  "deployment-target",
+  "runtime-identity",
+  "change-base",
+  "change-head",
+  "previous-artifact-available",
+  "rollback-runbook-present",
+];
+
 const ROLLBACK_HAZARDS = new Set([
   "destructive-ddl",
   "destructive-data-operation",
@@ -157,10 +170,15 @@ export function inspectRollbackReadiness(root, contract, current, previous, chan
     fail: checks.filter((item) => item.status === "FAIL").length,
   };
   return {
+    version: 1,
     currentCommit: current.source.commit,
     previousCommit: previous.source.commit,
     deploymentTarget: current.deployment.target,
     runtime: current.deployment.runtime,
+    artifacts: {
+      currentSha256: current.build.artifact.sha256,
+      previousSha256: previous.build.artifact.sha256,
+    },
     migration: migrationSummary,
     trust: {
       currentProvenanceAuthenticated: current.evidence.authenticated,
@@ -175,6 +193,129 @@ export function inspectRollbackReadiness(root, contract, current, previous, chan
   };
 }
 
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function reportObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) &&
+    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
+}
+
+/** @param {unknown} value @param {number} [max] */
+function reportText(value, max = 512) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 && normalized.length <= max && !/[\u0000\r\n]/.test(normalized) ? normalized : null;
+}
+
+/** @param {unknown} value */
+function reportInteger(value) {
+  return Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : null;
+}
+
+/** @param {Record<string, unknown>} value @param {string[]} allowed @param {string} scope @param {Array<{id:string,detail:string}>} errors */
+function rejectReportUnknown(value, allowed, scope, errors) {
+  for (const key of Object.keys(value)) if (!allowed.includes(key)) errors.push({ id: `${scope}-field-unknown`, detail: `${scope} contains unsupported field "${key}"` });
+}
+
+/** @param {unknown} value */
+export function validateRollbackReadinessReport(value) {
+  /** @type {Array<{id:string,detail:string}>} */ const errors = [];
+  if (!reportObject(value)) return { valid: false, report: null, errors: [{ id: "report-invalid", detail: "rollback readiness report must be an object" }] };
+  rejectReportUnknown(value, ["version", "currentCommit", "previousCommit", "deploymentTarget", "runtime", "artifacts", "migration", "trust", "checks", "summary", "technicalStatus", "overallStatus", "semantics"], "report", errors);
+  if (value.version !== 1) errors.push({ id: "version-invalid", detail: "rollback readiness report version must be exactly 1" });
+
+  const currentCommit = reportText(value.currentCommit, 128)?.toLowerCase() ?? null;
+  const previousCommit = reportText(value.previousCommit, 128)?.toLowerCase() ?? null;
+  if (!currentCommit || !isFullObjectId(currentCommit)) errors.push({ id: "current-commit-invalid", detail: "currentCommit must be a full Git object id" });
+  if (!previousCommit || !isFullObjectId(previousCommit)) errors.push({ id: "previous-commit-invalid", detail: "previousCommit must be a full Git object id" });
+  const deploymentTarget = reportText(value.deploymentTarget);
+  if (!deploymentTarget) errors.push({ id: "deployment-target-invalid", detail: "deploymentTarget must be non-empty" });
+
+  let runtime = null;
+  if (!reportObject(value.runtime)) errors.push({ id: "runtime-invalid", detail: "runtime must be an object" });
+  else {
+    rejectReportUnknown(value.runtime, ["name", "environment"], "runtime", errors);
+    const name = reportText(value.runtime.name), environment = value.runtime.environment === undefined ? null : reportText(value.runtime.environment);
+    if (!name || (value.runtime.environment !== undefined && !environment)) errors.push({ id: "runtime-fields-invalid", detail: "runtime requires name and optional non-empty environment" });
+    else runtime = { name, ...(environment ? { environment } : {}) };
+  }
+
+  let artifacts = null;
+  if (!reportObject(value.artifacts)) errors.push({ id: "artifacts-invalid", detail: "artifacts must be an object" });
+  else {
+    rejectReportUnknown(value.artifacts, ["currentSha256", "previousSha256"], "artifacts", errors);
+    const currentSha256 = reportText(value.artifacts.currentSha256, 64)?.toLowerCase() ?? null;
+    const previousSha256 = reportText(value.artifacts.previousSha256, 64)?.toLowerCase() ?? null;
+    if (!currentSha256 || !/^[0-9a-f]{64}$/.test(currentSha256) || !previousSha256 || !/^[0-9a-f]{64}$/.test(previousSha256)) errors.push({ id: "artifact-hash-invalid", detail: "artifacts must contain current and previous SHA256 values" });
+    else artifacts = { currentSha256, previousSha256 };
+  }
+
+  let migration = null;
+  if (!reportObject(value.migration)) errors.push({ id: "migration-invalid", detail: "migration must be an object" });
+  else {
+    rejectReportUnknown(value.migration, ["mode", "newMigrations", "hazards", "compatibility"], "migration", errors);
+    const mode = reportText(value.migration.mode, 32), compatibility = reportText(value.migration.compatibility, 32);
+    const newMigrations = reportInteger(value.migration.newMigrations), hazards = reportInteger(value.migration.hazards);
+    if (!mode || !new Set(["NONE", "CHECK"]).has(mode) || !compatibility || !new Set(["NOT_APPLICABLE", "COMPATIBLE", "INCOMPATIBLE", "UNVERIFIED"]).has(compatibility) || newMigrations === null || hazards === null) errors.push({ id: "migration-fields-invalid", detail: "migration summary is invalid" });
+    else {
+      if (mode === "NONE" && (compatibility !== "NOT_APPLICABLE" || newMigrations !== 0 || hazards !== 0)) errors.push({ id: "migration-none-inconsistent", detail: "NONE migration summary requires NOT_APPLICABLE compatibility and zero migrations/hazards" });
+      if (mode === "CHECK" && compatibility === "NOT_APPLICABLE") errors.push({ id: "migration-check-inconsistent", detail: "CHECK migration summary requires an explicit compatibility assessment" });
+      migration = { mode, newMigrations, hazards, compatibility };
+    }
+  }
+
+  let trust = null;
+  const trustKeys = ["currentProvenanceAuthenticated", "previousProvenanceAuthenticated", "changeEvidenceAuthenticated"];
+  const rawTrust = value.trust;
+  if (!reportObject(rawTrust) || Object.keys(rawTrust).some((key) => !trustKeys.includes(key)) || trustKeys.some((key) => typeof rawTrust[key] !== "boolean")) errors.push({ id: "trust-invalid", detail: "trust must contain the three rollback authentication booleans" });
+  else trust = Object.fromEntries(trustKeys.map((key) => [key, rawTrust[key]]));
+
+  /** @type {Array<{id:string,status:"PASS"|"WARN"|"FAIL",detail:string,path?:string}>} */ const checks = [];
+  if (!Array.isArray(value.checks) || value.checks.length === 0) errors.push({ id: "checks-invalid", detail: "checks must be a non-empty array" });
+  else {
+    for (const raw of value.checks) {
+      if (!reportObject(raw)) { errors.push({ id: "check-invalid", detail: "rollback checks must be objects" }); continue; }
+      rejectReportUnknown(raw, ["id", "status", "detail", "path"], "check", errors);
+      const id = reportText(raw.id, 512), status = reportText(raw.status, 16), detail = reportText(raw.detail, 2048), checkPath = raw.path === undefined ? null : reportText(raw.path, 512);
+      if (!id || !status || !new Set(["PASS", "WARN", "FAIL"]).has(status) || !detail || (raw.path !== undefined && !checkPath)) { errors.push({ id: "check-fields-invalid", detail: "rollback checks require id, status, detail, and optional bounded path" }); continue; }
+      checks.push({ id, status: /** @type {"PASS"|"WARN"|"FAIL"} */ (status), detail, ...(checkPath ? { path: checkPath } : {}) });
+    }
+  }
+
+  const checkIds = new Set(checks.map((item) => item.id));
+  for (const required of REQUIRED_ROLLBACK_REPORT_BASE_CHECK_IDS) {
+    if (!checkIds.has(required)) errors.push({ id: "required-rollback-check-missing", detail: `rollback report is missing canonical check ${required}` });
+  }
+  const artifactAvailable = checks.find((item) => item.id === "previous-artifact-available");
+  if (artifactAvailable?.status === "PASS" && !checkIds.has("previous-artifact-hash")) errors.push({ id: "previous-artifact-hash-check-missing", detail: "successful prior-artifact availability requires its canonical hash check" });
+  const runbookPresent = checks.find((item) => item.id === "rollback-runbook-present");
+  if (runbookPresent?.status === "PASS" && !checkIds.has("rollback-command-documented")) errors.push({ id: "rollback-command-check-missing", detail: "successful rollback runbook presence requires the canonical command-documentation check" });
+  if (migration?.mode === "NONE") {
+    if (!checkIds.has("migration-not-applicable")) errors.push({ id: "migration-none-check-missing", detail: "NONE migration mode requires the canonical migration-not-applicable check" });
+  } else if (migration?.mode === "CHECK") {
+    const unavailable = checkIds.has("migration-manifest-unavailable") || checkIds.has("migration-audit-unavailable");
+    if (!unavailable) {
+      for (const required of ["migration-history-bound", "migration-compatibility"]) if (!checkIds.has(required)) errors.push({ id: "migration-check-missing", detail: `CHECK migration mode is missing canonical check ${required}` });
+      if (!checkIds.has("migration-surface-binding") && !checkIds.has("migration-surface-mismatch")) errors.push({ id: "migration-surface-check-missing", detail: "CHECK migration mode requires a surface-binding or mismatch check" });
+      const hazardEvidence = checkIds.has("migration-rollback-hazards") || checks.some((item) => item.id.startsWith("migration-rollback-hazard-"));
+      if (!hazardEvidence) errors.push({ id: "migration-hazard-check-missing", detail: "CHECK migration mode requires rollback-hazard evidence" });
+    }
+  }
+
+  const pass = checks.filter((item) => item.status === "PASS").length;
+  const warn = checks.filter((item) => item.status === "WARN").length;
+  const fail = checks.filter((item) => item.status === "FAIL").length;
+  if (!reportObject(value.summary) || Object.keys(value.summary).some((key) => !["pass", "warn", "fail"].includes(key)) || value.summary.pass !== pass || value.summary.warn !== warn || value.summary.fail !== fail) errors.push({ id: "summary-invalid", detail: "summary must exactly match rollback check counts" });
+  const technicalStatus = reportText(value.technicalStatus, 16), overallStatus = reportText(value.overallStatus, 16);
+  const expectedOverall = fail > 0 ? "FAIL" : warn > 0 ? "WARN" : "PASS";
+  if (expectedOverall !== "FAIL" && migration?.mode === "CHECK" && (migration.compatibility !== "COMPATIBLE" || migration.hazards !== 0)) errors.push({ id: "migration-nonblocking-inconsistent", detail: "non-blocking CHECK reports require COMPATIBLE assessment and zero rollback hazards" });
+  if (!technicalStatus || !new Set(["PASS", "FAIL"]).has(technicalStatus) || overallStatus !== expectedOverall || (technicalStatus === "FAIL" && overallStatus !== "FAIL")) errors.push({ id: "status-invalid", detail: "technicalStatus or overallStatus is inconsistent with rollback checks" });
+  const semantics = reportText(value.semantics, 4096);
+  if (!semantics) errors.push({ id: "semantics-invalid", detail: "rollback report semantics must be explicit" });
+
+  if (errors.length > 0 || !currentCommit || !previousCommit || !deploymentTarget || !runtime || !artifacts || !migration || !trust || !technicalStatus || !overallStatus || !semantics) return { valid: false, report: null, errors };
+  return { valid: true, report: { version: 1, currentCommit, previousCommit, deploymentTarget, runtime, artifacts, migration, trust, checks, summary: { pass, warn, fail }, technicalStatus, overallStatus, semantics }, errors: [] };
+}
+
 /** @param {ReturnType<typeof inspectRollbackReadiness>} report */
 export function formatRollbackReadiness(report) {
   const lines = [
@@ -184,6 +325,8 @@ export function formatRollbackReadiness(report) {
     `Previous commit: ${report.previousCommit}`,
     `Deployment target: ${report.deploymentTarget}`,
     `Runtime: ${report.runtime.name}${report.runtime.environment ? ` / ${report.runtime.environment}` : ""}`,
+    `Current artifact SHA256: ${report.artifacts.currentSha256}`,
+    `Previous artifact SHA256: ${report.artifacts.previousSha256}`,
     `Migration mode: ${report.migration.mode}`,
     `New migrations: ${report.migration.newMigrations}`,
     `Rollback hazards: ${report.migration.hazards}`,

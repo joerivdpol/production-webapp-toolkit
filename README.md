@@ -676,6 +676,40 @@ bun run release:evidence:export -- \
 
 The exporter contains no built-in SOC, ISO, PCI, HIPAA, or other standards mapping and makes no formal compliance judgment. Organizations may maintain their own private mappings for audit preparation, partner review, or evidence collection without turning the toolkit into a certification or compliance-attestation product.
 
+### Policy-driven deployment gate
+
+`bun run deployment:gate` evaluates Deployment Gate Policy v1 against a validated Release Evidence Bundle v1 and a validated, versioned Rollback Readiness Report v1. It produces exactly one decision: `ALLOW`, `UNVERIFIED`, or `BLOCK`. The command exits zero only for `ALLOW`; both `UNVERIFIED` and `BLOCK` exit nonzero so an external deployment system cannot accidentally treat incomplete trust evidence as deployable.
+
+Three release-to-rollback bindings are hard requirements and cannot be weakened by policy: source commit, current artifact SHA256, and runtime identity must match exactly. An `INVALID` release bundle, artifact-provenance `FAIL`, runtime-health `FAIL`, vulnerability `FAIL`, rollback `FAIL`, rollback technical failure, required CI `FAIL`, or any of those identity mismatches is always `BLOCK`.
+
+Policy controls only explicit trust/readiness posture: the maximum accepted Release Evidence Bundle age, which release and rollback evidence sources must be authenticated, which CI check names must pass, whether `WARN` is acceptable for runtime health or vulnerability results, and whether rollback `WARN` is acceptable. The evaluation clock is caller supplied and absolute; the gate never reads the system clock. A stale bundle yields `UNVERIFIED`, a bundle created after the evaluation time yields `BLOCK`, and a required authentication source that is not authenticated, a missing/skipped required CI check, or a `WARN` result not explicitly tolerated yields `UNVERIFIED`, never `ALLOW`.
+
+```json
+{
+  "version": 1,
+  "maxBundleAgeSeconds": 900,
+  "requiredAuthenticatedEvidence": ["ci", "provenance", "runtime", "runtimeHealth"],
+  "requiredCiChecks": ["quality", "build"],
+  "allowedRuntimeHealthStatuses": ["PASS"],
+  "allowedVulnerabilityStatuses": ["PASS", "WARN"],
+  "rollback": {
+    "allowedStatuses": ["PASS"],
+    "requiredAuthenticatedEvidence": ["currentProvenance", "previousProvenance"]
+  }
+}
+```
+
+```sh
+bun run deployment:gate -- \
+  --bundle ./release-evidence-bundle.json \
+  --rollback-report ./rollback-readiness-report.json \
+  --policy /private/path/deployment-gate-policy.json \
+  --evaluated-at 2026-09-17T10:05:00Z \
+  --json
+```
+
+The output always states `executionPerformed: false` and `executionAuthorizedByToolkit: false`. `ALLOW` is a policy result over supplied evidence, not a deployment action, provider authorization, or guarantee of production correctness. The gate is offline and read only: it performs no Git mutation, shell execution, network access, provider call, environment read, artifact upload, or deployment.
+
 ### PostgreSQL security policy audit
 
 `bun run security:snapshot` validates PostgreSQL Security Snapshot v1. `bun run security:snapshot:postgres:collect` collects read-only catalog evidence through an explicit libpq service. `bun run audit:postgres-security` evaluates that evidence against an explicit version 1 project policy.
@@ -1848,6 +1882,8 @@ bun run audit:rollback-readiness -- \
 ```
 
 The previous artifact is hashed directly from the caller-supplied regular non-symlink file. The configured rollback runbook is bounded and read only; the audit checks that the exact configured command appears in it but never copies runbook contents into reports. When a broad database change surface exists while the contract explicitly declares no schema migration, readiness remains `WARN` because absence of a migration is not independently established.
+
+JSON output is Rollback Readiness Report v1. It now carries explicit current and previous artifact SHA256 identities in addition to release/runtime bindings, trust metadata, migration summary, and check counts; the standalone report validator is reused by the deployment gate.
 
 A passing report does not execute rollback, deploy artifacts, modify a database, or prove that a caller-declared schema compatibility assessment is semantically correct. It proves the explicit release identity, artifact availability, documentation binding, migration-history integrity, and conservative rollback-hazard checks represented by the supplied evidence.
 
