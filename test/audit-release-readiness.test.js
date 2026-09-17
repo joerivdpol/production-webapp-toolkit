@@ -8,6 +8,8 @@ import { spawnSync } from "node:child_process";
 import {
   formatReleaseReadiness,
   inspectReleaseReadiness,
+  V2_REQUIRED_CAPABILITIES,
+  V2_REQUIRED_SCRIPTS,
 } from "../scripts/audit-release-readiness.js";
 
 const REQUIRED_CAPABILITIES = [
@@ -30,14 +32,15 @@ const REQUIRED_SCRIPTS = [
   "audit:deployment", "audit:repository-status", "audit:ecosystem-status",
   "audit:release", "runtime:evidence", "release:verify",
 ];
-/** @param {{ version?: string, nodeVersion?: string, nodeEngine?: string, packageManager?: string, ciBunVersion?: string, readme?: string, roadmap?: string, omitCapability?: string, omitScript?: string, includeSafetyCi?: boolean }} [options] */
+/** @param {{ version?: string, nodeVersion?: string, nodeEngine?: string, packageManager?: string, ciBunVersion?: string, readme?: string, roadmap?: string, omitCapability?: string, omitScript?: string, includeSafetyCi?: boolean, v2Surface?: boolean }} [options] */
 function createToolkitFixture(options = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "release-readiness-"));
   fs.mkdirSync(path.join(root, "scripts"), { recursive: true });
   fs.mkdirSync(path.join(root, "docs", "releases"), { recursive: true });
   fs.mkdirSync(path.join(root, ".github", "workflows"), { recursive: true });
 
-  const scripts = Object.fromEntries(REQUIRED_SCRIPTS.map((name) => [name, `echo ${name}`]));
+  const scriptNames = options.v2Surface ? [...REQUIRED_SCRIPTS, ...V2_REQUIRED_SCRIPTS] : REQUIRED_SCRIPTS;
+  const scripts = Object.fromEntries(scriptNames.map((name) => [name, `echo ${name}`]));
   if (options.omitScript) delete scripts[options.omitScript];
   fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({
     name: "fixture-toolkit",
@@ -50,17 +53,25 @@ function createToolkitFixture(options = {}) {
   fs.writeFileSync(path.join(root, ".node-version"), `${options.nodeVersion ?? "24.21.0"}\n`);
   fs.writeFileSync(path.join(root, "bun.lock"), "{\n  \"lockfileVersion\": 1\n}\n");
 
-  for (const file of REQUIRED_CAPABILITIES) {
+  const capabilityFiles = options.v2Surface ? [...REQUIRED_CAPABILITIES, ...V2_REQUIRED_CAPABILITIES] : REQUIRED_CAPABILITIES;
+  for (const file of capabilityFiles) {
     if (file !== options.omitCapability) fs.writeFileSync(path.join(root, "scripts", file), "// fixture\n");
   }
 
-  fs.writeFileSync(path.join(root, "README.md"), options.readme ?? [
+  const readmeLines = [
     "# Fixture", "Node.js 24.21.0", "Bun 1.3.14", "Offline Git governance audit", "Offline production baseline audit",
     "Deployment verification", "Evidence freshness", "Runtime identity",
     "Runtime evidence contract", "Repository status", "Ecosystem status", "DEPLOYMENT",
-  ].join("\n"));
-  fs.writeFileSync(path.join(root, "docs", "roadmap.md"), options.roadmap ?? "## v1.1\n## v2\n");
-  fs.writeFileSync(path.join(root, "docs", "releases", "v1.1.0.md"), "# Production Webapp Toolkit v1.1.0\n\n## Status semantics\n\n## Trust boundaries\n");
+  ];
+  if (options.v2Surface) readmeLines.push("## v2.0 capability surface", "deployment:gate", "release:evidence:bundle");
+  fs.writeFileSync(path.join(root, "README.md"), options.readme ?? readmeLines.join("\n"));
+  fs.writeFileSync(path.join(root, "docs", "roadmap.md"), options.roadmap ?? "## v1.1\n## v2.0 Controlled automation\n\n* v2.0 controlled-automation roadmap capabilities are complete in the current source tree.\n");
+  const version = options.version ?? "1.0.1";
+  /** @param {string} releaseVersion */
+  const releaseNotes = (releaseVersion) => `# Production Webapp Toolkit v${releaseVersion}\n\n## Status semantics\n\n## Trust boundaries\n${releaseVersion.startsWith("2.") ? "\n## Upgrade notes\n" : ""}`;
+  fs.writeFileSync(path.join(root, "docs", "releases", `v${version}.md`), releaseNotes(version));
+  fs.writeFileSync(path.join(root, "docs", "releases", "v1.1.0.md"), releaseNotes("1.1.0"));
+  if (options.v2Surface || version.startsWith("2.")) fs.writeFileSync(path.join(root, "docs", "releases", "v2.0.0.md"), releaseNotes("2.0.0"));
   const safetyLine = options.includeSafetyCi === false ? "" : "- run: node scripts/audit-public-repo-safety.js .";
   fs.writeFileSync(path.join(root, ".github", "workflows", "ci.yml"), [
     "steps:",
@@ -97,7 +108,7 @@ test("reports a complete v1.1 capability surface as ready", () => {
   assert.equal(report.nodeVersion, "24.21.0");
   assert.equal(report.bunVersion, "1.3.14");
   assert.equal(report.checks.every((item) => item.passed), true);
-  assert.match(formatReleaseReadiness(report), /v1\.1 release readiness/);
+  assert.match(formatReleaseReadiness(report), /v1\.0\.1 release readiness/);
 });
 test("supports an exact release-version gate without requiring an early version bump", () => {
   const preparing = inspectReleaseReadiness(createToolkitFixture(), { expectedVersion: "1.1.0" });
@@ -107,6 +118,36 @@ test("supports an exact release-version gate without requiring an early version 
   const release = inspectReleaseReadiness(createToolkitFixture({ version: "1.1.0" }), { expectedVersion: "1.1.0" });
   assert.equal(release.ready, true);
   assert.match(formatReleaseReadiness(release), /READY FOR v1\.1\.0/);
+});
+
+test("reports a complete v2.0 capability surface as ready", () => {
+  const root = createToolkitFixture({ version: "2.0.0", v2Surface: true });
+  const report = inspectReleaseReadiness(root, { expectedVersion: "2.0.0" });
+  assert.equal(report.ready, true, JSON.stringify(report.checks.filter((item) => !item.passed)));
+  assert.equal(report.targetVersion, "2.0.0");
+  assert.equal(report.targetMajor, 2);
+  assert.equal(check(report, "standard-scripts")?.passed, true);
+  assert.equal(check(report, "capabilities-present")?.passed, true);
+  assert.equal(check(report, "readme-current-release")?.passed, true);
+  assert.match(formatReleaseReadiness(report), /READY FOR v2\.0\.0/);
+});
+
+test("v2.0 release readiness requires the full current script and capability surface", () => {
+  const missingScript = inspectReleaseReadiness(createToolkitFixture({ version: "2.0.0", v2Surface: true, omitScript: "deployment:gate" }), { expectedVersion: "2.0.0" });
+  assert.equal(missingScript.ready, false);
+  assert.equal(check(missingScript, "standard-scripts")?.passed, false);
+
+  const missingCapability = inspectReleaseReadiness(createToolkitFixture({ version: "2.0.0", v2Surface: true, omitCapability: "deployment-gate.js" }), { expectedVersion: "2.0.0" });
+  assert.equal(missingCapability.ready, false);
+  assert.equal(check(missingCapability, "capabilities-present")?.passed, false);
+});
+
+test("v2.0 release readiness requires v2 roadmap, README surface, and upgrade notes", () => {
+  const badRoadmap = inspectReleaseReadiness(createToolkitFixture({ version: "2.0.0", v2Surface: true, roadmap: "## v1.1\n## v2.0 Controlled automation\n" }), { expectedVersion: "2.0.0" });
+  assert.equal(check(badRoadmap, "roadmap-present")?.passed, false);
+
+  const badReadme = inspectReleaseReadiness(createToolkitFixture({ version: "2.0.0", v2Surface: true, readme: "Node.js 24.21.0\nBun 1.3.14\nOffline Git governance audit\nOffline production baseline audit\nDeployment verification\nEvidence freshness\nRuntime identity\nRuntime evidence contract\nRepository status\nEcosystem status\nDEPLOYMENT\n" }), { expectedVersion: "2.0.0" });
+  assert.equal(check(badReadme, "readme-current-release")?.passed, false);
 });
 
 test("rejects floating or inconsistent Bun versions", () => {
@@ -187,7 +228,12 @@ test("CLI supports exact-version JSON gating and rejects invalid arguments", () 
   assert.equal(mismatch.status, 1);
   assert.equal(JSON.parse(mismatch.stdout).ready, false);
 
-  for (const args of [[root, "--expected-version"], [root, "--expected-version", "2.0.0"], [root, "--unknown"]]) {
+  const v2Root = createToolkitFixture({ version: "2.0.0", v2Surface: true });
+  const v2 = spawnSync("node", [script, v2Root, "--expected-version", "2.0.0", "--json"], { encoding: "utf8" });
+  assert.equal(v2.status, 0, v2.stderr || v2.stdout);
+  assert.equal(JSON.parse(v2.stdout).ready, true);
+
+  for (const args of [[root, "--expected-version"], [root, "--expected-version", "0.0.0"], [root, "--expected-version", "2.0"], [root, "--unknown"]]) {
     assert.equal(spawnSync("node", [script, ...args], { encoding: "utf8" }).status, 1);
   }
 });
