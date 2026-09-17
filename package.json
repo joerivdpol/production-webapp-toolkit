@@ -103,7 +103,9 @@
     "backup:evidence": "node scripts/backup-readiness-evidence.js",
     "audit:backup-readiness": "node scripts/audit-backup-readiness.js",
     "dr:contract": "node scripts/disaster-recovery-contract.js",
-    "audit:dr-readiness": "node scripts/audit-disaster-recovery.js"
+    "audit:dr-readiness": "node scripts/audit-disaster-recovery.js",
+    "rollback:contract": "node scripts/rollback-readiness-contract.js",
+    "audit:rollback-readiness": "node scripts/audit-rollback-readiness.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
