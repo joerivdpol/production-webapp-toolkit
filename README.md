@@ -1848,3 +1848,20 @@ Config-relative inputs are resolved from the dashboard config location; explicit
 Dashboard `generatedAt` is explicit. Evidence dated after the snapshot time is reported as a readiness warning without rewriting the observed check states. Authentication remains trust metadata only. Private input file paths and provider payloads are not emitted in the dashboard.
 
 The dashboard is offline and read only. It does not execute checks, infer required/advisory severity from evidence, inspect environment values, contact providers, or mutate repositories and production systems.
+
+### Ecosystem history comparison
+
+`bun run ecosystem:history` compares two validated Ecosystem Dashboard v1 snapshots without turning historical movement into a new gate. The current snapshot must be strictly newer than the previous snapshot. Both snapshots are structurally and internally validated before comparison, including repository status counts, required/advisory summaries, check impact semantics, and top-level truth consistency.
+
+Repository transitions are reported as `IMPROVED`, `REGRESSED`, `UNCHANGED`, `ADDED`, or `REMOVED`. For repositories present in both snapshots, the comparator also reports profile changes, policy-source changes, and scoped check status/requirement changes. Duplicate repository identities and unidentified technical rows are surfaced as anomalies and are not silently merged into a project history. Unscoped evidence is not promoted into policy history.
+
+```sh
+bun run ecosystem:history -- \
+  --previous ./ecosystem-previous.json \
+  --current ./ecosystem-current.json \
+  --json
+```
+
+A valid comparison always exits zero even when repositories regressed. Regression is descriptive historical information, not a substitute for the current dashboard gate. The output carries previous and current overall/technical truth exactly as stored in the validated snapshots and states that it never recomputes them into a new policy result. Invalid/tampered snapshots or non-increasing snapshot time are input failures and exit nonzero.
+
+The comparator is offline and read only. It performs no Git, provider, runtime, environment, or production access and never mutates dashboard evidence.
