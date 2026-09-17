@@ -541,7 +541,7 @@ Current release verification:
 
 ```sh
 bun run release:verify
-bun run audit:release . --expected-version 2.0.1
+bun run audit:release . --expected-version 2.1.0
 ```
 
 The historical v1.1 capability surface is retained below for upgrade context.
