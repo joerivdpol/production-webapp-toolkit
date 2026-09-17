@@ -219,6 +219,46 @@ bun run agent:evaluate -- \
 
 Future model runners, including Promptfoo integration, can execute the same fixed public fixtures and feed their normalized outputs into this evaluator. Private repositories may maintain additional private corpora without publishing business rules, code, infrastructure, or production evidence.
 
+## Repair Agent v1
+
+`bun run agent:repair` adds a bounded repair workflow above the existing task, role, lease, and worker-local model contracts. Repair v1 is proposal-first. The public template `templates/agent-repair-policy.v1.json` uses `applyMode: PROPOSE_ONLY`; a private operator policy must explicitly opt in to `ALLOW_LOW_RISK_WORKTREE` before any source file can be changed.
+
+Repair Input v1 binds the repair task to exact source task ids, bounded evidence, and explicit source context files. Every context file carries repository-relative path, SHA256, and content. Before proposal generation, the toolkit verifies those hashes against a clean linked Git worktree whose `HEAD` exactly matches the task `baseCommit`. The model therefore receives only operator-selected evidence and context; it does not browse the repository, run commands, or invent canonical business rules.
+
+A Repair Proposal v1 may contain only `MODIFY` and explicitly policy-allowed `CREATE` operations. Each proposed path must satisfy both Agent Task scope and the private repair policy. `MODIFY` requires the exact context-file before-SHA256 and changed content. `CREATE` requires `beforeSha256: null` and cannot target an existing context path. Delete and rename semantics are not part of v1. Evidence ids must come from Repair Input v1, and required checks are carried forward from task and policy. Proposal generation performs no source mutation and no checks.
+
+```sh
+bun run agent:repair -- propose \
+  --task /private/tasks/repair.json \
+  --role-policy /private/policy/agent-roles.json \
+  --policy /private/policy/repair.json \
+  --input /private/tasks/repair-input.json \
+  --worktree /private/worktrees/repair-task \
+  --model-config /private/config/model-backends.json \
+  --backend worker-local \
+  --model repair-local \
+  --json
+```
+
+Worktree apply is a separate explicit operation. It is available only when the private policy says `ALLOW_LOW_RISK_WORKTREE` and the Agent Task risk is exactly `LOW`. The registered task must exactly match and be `RUNNING`; an active WRITE lease must match task, worker, and repository. Repair v1 additionally requires shell `NONE` and network `NONE`. Existing files are re-hashed immediately before write, CREATE targets must still be absent, and the linked worktree must still be clean at the exact base commit. After writing, Git status must contain exactly the declared proposal paths or the operation rolls back its file changes.
+
+```sh
+bun run agent:repair -- apply \
+  --task /private/tasks/repair.json \
+  --role-policy /private/policy/agent-roles.json \
+  --policy /private/policy/repair.json \
+  --input /private/tasks/repair-input.json \
+  --worktree /private/worktrees/repair-task \
+  --proposal /private/tasks/repair-proposal.json \
+  --registry /private/state/agent-control.sqlite \
+  --lease-id lease:example \
+  --worker-id worker-example \
+  --evaluated-at 2026-09-17T14:01:00Z \
+  --json
+```
+
+Apply changes only the isolated worktree. It does not execute the required checks, commit, push, open or merge a pull request, deploy, mutate production, or call an external provider. The returned `requiredChecks` are obligations for a later sandbox or human-controlled execution layer. Real repository rules, source context, worker ids, model mappings, leases, and policy files remain private operator state.
+
 ## Initial roles
 
 The initial safe roles are `diagnose`, `reproduce`, and `review`. They are intended to establish evidence quality before source-modifying automation is enabled. `repair`, `docs`, `contract`, `dependency`, and `incident` are reserved Agent Task v1 roles for later phases with separate policy and execution boundaries.
