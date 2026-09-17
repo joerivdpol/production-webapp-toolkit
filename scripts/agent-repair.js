@@ -96,7 +96,7 @@ export function inspectAgentRepairWorktree(root,expectedCommit,requireClean=true
 function resolveInside(root,relativePath){const target=path.resolve(root,...relativePath.split("/"));if(target!==path.join(root,relativePath)||!target.startsWith(`${root}${path.sep}`))throw new Error("repair path escapes worktree");return target;}
 
 /** @param {string} root @param {any} input */
-function verifyRepairContext(root,input){
+export function verifyAgentWorktreeContext(root,input){
   for(const item of input.contextFiles){const target=resolveInside(root,item.path);let stat;try{stat=fs.lstatSync(target);}catch{throw new Error(`repair context file is unavailable: ${item.path}`);}if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1||stat.size<=0||stat.size>512*1024)throw new Error(`repair context file is not a bounded single-link regular file: ${item.path}`);const content=fs.readFileSync(target,"utf8");if(content.includes("\u0000")||sha256(content)!==item.sha256||content!==item.content)throw new Error(`repair context file does not match exact supplied content/hash: ${item.path}`);}
 }
 
@@ -155,7 +155,7 @@ function buildRepairPrompt(task,policy,input){
 export async function proposeAgentRepair(task,rolePolicy,policy,input,worktree,modelConfig,backend,model,deps={}){
   validateRepairBindings(task,policy,input);
   const roleAudit=inspectAgentTaskRolePolicy(task,rolePolicy);if(roleAudit.overallStatus!=="PASS"||!roleAudit.leaseRequired)throw new Error("repair task is not authorized by Agent Role Policy v1");
-  const state=inspectAgentRepairWorktree(worktree,task.repository.baseCommit,true);verifyRepairContext(state.root,input);
+  const state=inspectAgentRepairWorktree(worktree,task.repository.baseCommit,true);verifyAgentWorktreeContext(state.root,input);
   const prompt=buildRepairPrompt(task,policy,input);
   const request=validateAgentModelRequest({version:1,backend,model,messages:[{role:"system",content:prompt.system},{role:"user",content:prompt.user}],temperature:0,maxOutputTokens:8192,timeoutMs:60000});if(!request.valid||!request.request)throw new Error("repair model request is invalid");
   const response=await(deps.invoke??invokeAgentLocalModel)(modelConfig,request.request);let raw;try{raw=JSON.parse(response.content);}catch{throw new Error("repair model returned non-JSON output");}
@@ -174,11 +174,15 @@ function requireActiveRepairLease(task,rolePolicy,db,leaseId,workerId,evaluatedA
   return{roleAudit,lease};
 }
 
+/** @param {string} root */
+export function getAgentWorktreeChangedPaths(root){
+  const records=git(root,["status","--porcelain=v1","-z","--untracked-files=all"]).split("\0").filter(Boolean);
+  return records.map((record)=>record.length>=4?record.slice(3):"").sort();
+}
+
 /** @param {string} root @param {string[]} expectedPaths */
 function requireOnlyRepairChanges(root,expectedPaths){
-  const records=git(root,["status","--porcelain=v1","-z","--untracked-files=all"]).split("\0").filter(Boolean);
-  const paths=records.map((record)=>record.length>=4?record.slice(3):"").sort();
-  const expected=[...expectedPaths].sort();
+  const paths=getAgentWorktreeChangedPaths(root),expected=[...expectedPaths].sort();
   if(paths.length!==expected.length||paths.some((value,index)=>value!==expected[index]))throw new Error("repair worktree changed outside declared proposal paths");
 }
 /** @param {string} root @param {any} proposal */
@@ -213,7 +217,7 @@ export function applyAgentRepair(task,rolePolicy,policy,input,rawProposal,db,lea
   if(task.risk!=="LOW")throw new Error("worktree apply is limited to LOW risk repair tasks");
   const proposalResult=validateAgentRepairProposal(rawProposal,task,policy,input);if(!proposalResult.valid||!proposalResult.proposal)throw new Error("Repair Proposal v1 is invalid");
   const authorization=requireActiveRepairLease(task,rolePolicy,db,leaseId,workerId,evaluatedAt);
-  const state=inspectAgentRepairWorktree(worktree,task.repository.baseCommit,true);verifyRepairContext(state.root,input);
+  const state=inspectAgentRepairWorktree(worktree,task.repository.baseCommit,true);verifyAgentWorktreeContext(state.root,input);
   const prepared=prepareRepairWrites(state.root,proposalResult.proposal);let applied=false;
   try{
     for(const file of prepared){if(file.operation==="CREATE")fs.writeFileSync(file.target,file.content,{encoding:"utf8",flag:"wx",mode:0o600});else fs.writeFileSync(file.target,file.content,{encoding:"utf8",flag:"w"});}
