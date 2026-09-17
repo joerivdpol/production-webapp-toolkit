@@ -1649,3 +1649,44 @@ The audit keeps independent findings for latest backup success, backup freshness
 A passing report does not independently inspect backup contents, cryptographic implementation, retention, restore completeness, or actual recoverability. It means only that the supplied evidence and repository instruction-file presence satisfy explicit policy bounds.
 
 Both commands are local and read only. They do not access backup storage, restore databases, execute runbooks, inspect runtime environment values, or mutate repository or production state. Restore-instruction contents are not copied into reports.
+
+### Disaster recovery contract and readiness audit
+
+`bun run dr:contract` validates Disaster Recovery Contract v1. Every recovery plan must explicitly cover seven areas: source, database, secrets, DNS, deployment, rollback, and restore. Each area binds a portable owner id to a repository-relative runbook file. The contract also records when the plan was reviewed and the maximum accepted review age.
+
+`bun run audit:dr-readiness` evaluates those bindings at an explicit `evaluatedAt` timestamp. A plan fails when review evidence is stale or future-dated, or when any required area lacks a non-empty regular non-symlink runbook file. Shared runbooks are allowed when a project intentionally binds multiple areas to the same document.
+
+```json
+{
+  "version": 1,
+  "plans": [
+    {
+      "id": "production",
+      "reviewedAt": "2026-09-16T00:00:00Z",
+      "maxReviewAgeMinutes": 43200,
+      "areas": {
+        "source": { "owner": "engineering", "runbookPath": "docs/dr/source.md" },
+        "database": { "owner": "database", "runbookPath": "docs/dr/database.md" },
+        "secrets": { "owner": "security", "runbookPath": "docs/dr/secrets.md" },
+        "dns": { "owner": "operations", "runbookPath": "docs/dr/dns.md" },
+        "deployment": { "owner": "operations", "runbookPath": "docs/dr/deployment.md" },
+        "rollback": { "owner": "engineering", "runbookPath": "docs/dr/rollback.md" },
+        "restore": { "owner": "database", "runbookPath": "docs/dr/restore.md" }
+      }
+    }
+  ]
+}
+```
+
+```sh
+bun run dr:contract -- --file ./dr-contract.json --json
+bun run audit:dr-readiness -- \
+  --root /path/to/repository \
+  --contract ./dr-contract.json \
+  --evaluated-at 2026-09-17T00:00:00Z \
+  --json
+```
+
+This is machine-readable ownership and runbook-file-presence evidence only. It does not prove access to infrastructure, availability of secret material, DNS authority, deployment capability, rollback correctness, restore completeness, runbook quality, or operator competence. The public contract contains no secret values or application-specific recovery rules.
+
+The audit is local and read only. It does not execute recovery procedures, inspect runbook contents, access DNS or infrastructure providers, read runtime environment values, or mutate repository or production state.
