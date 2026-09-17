@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "repository": "example-repository",
+  "testPathPatterns": [
+    "test/*.test.js",
+    "test/*.test.ts"
+  ],
+  "allowedExtensions": [
+    ".js",
+    ".ts"
+  ],
+  "maxTestBytes": 65536
+}
