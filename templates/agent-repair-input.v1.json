@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "taskId": "task:repair-example",
+  "repository": {
+    "id": "example-repository",
+    "commit": "0123456789abcdef0123456789abcdef01234567"
+  },
+  "sourceTaskIds": [
+    "task:diagnose-example",
+    "task:reproduce-example"
+  ],
+  "evidence": [
+    {
+      "id": "regression-failure",
+      "source": "ci",
+      "status": "FAIL",
+      "summary": "A synthetic regression remains failing",
+      "path": "src/example.js"
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": "src/example.js",
+      "sha256": "5d8f65d2774e206bc9f7a7a4ad39ca2dc563b5c31e46ab57ef4874961237ce29",
+      "content": "export const value = 1;\n"
+    }
+  ],
+  "unknowns": []
+}
