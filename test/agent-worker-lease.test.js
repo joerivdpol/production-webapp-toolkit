@@ -65,7 +65,7 @@ function jsonFile(root, name, value) {
   return file;
 }
 
-test("registry schema upgrades v1 to v2 without losing existing task truth", () => {
+test("registry schema upgrades earlier versions to v3 without losing existing task truth", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-lease-upgrade-"));
   const file = path.join(root, "tasks.sqlite");
   const old = new DatabaseSync(file);
@@ -86,7 +86,7 @@ test("registry schema upgrades v1 to v2 without losing existing task truth", () 
   } finally { old.close(); }
   const db = openAgentTaskRegistry(file);
   try {
-    assert.equal(Number(db.prepare("PRAGMA user_version").get()?.user_version), 2);
+    assert.equal(Number(db.prepare("PRAGMA user_version").get()?.user_version), 3);
     assert.equal(getAgentTask(db, "task:upgrade")?.task.id, "task:upgrade");
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='agent_worker_leases'").get());
   } finally { db.close(); fs.rmSync(root, { recursive: true, force: true }); }

@@ -63,7 +63,7 @@ test("registry initializes schema and idempotently registers immutable Agent Tas
     assert.equal(first.record?.attemptCount, 0);
     assert.match(first.record?.taskSha256 ?? "", /^[0-9a-f]{64}$/);
     assert.equal(listAgentTaskEvents(fixture.db, rawTask().id).length, 1);
-    assert.equal(Number(fixture.db.prepare("PRAGMA user_version").get()?.user_version), 2);
+    assert.equal(Number(fixture.db.prepare("PRAGMA user_version").get()?.user_version), 3);
   } finally { cleanup(fixture); }
 });
 

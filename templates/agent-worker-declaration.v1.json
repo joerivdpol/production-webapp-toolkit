@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "persistent-worker",
+  "class": "PERSISTENT",
+  "state": "ONLINE",
+  "gpu": null,
+  "capabilities": ["local-model", "shell"],
+  "execution": {
+    "worktrees": false,
+    "maxReadOnlyTasks": 2,
+    "maxWriteTasks": 0
+  },
+  "load": {
+    "readOnlyTasks": 0,
+    "writeTasks": 0
+  },
+  "models": [
+    {
+      "id": "small-local",
+      "class": "SMALL",
+      "backend": "worker-local",
+      "contextTokens": 8192,
+      "toolUse": true
+    }
+  ]
+}
