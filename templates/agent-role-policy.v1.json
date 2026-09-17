@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "roles": [
+    { "id": "diagnose", "maxRisk": "CRITICAL", "authority": { "filesystem": "READ_ONLY", "shell": "BOUNDED", "network": "NONE" }, "writeMode": "NONE" },
+    { "id": "reproduce", "maxRisk": "HIGH", "authority": { "filesystem": "WORKTREE_WRITE", "shell": "BOUNDED", "network": "NONE" }, "writeMode": "LEASED_WORKTREE" },
+    { "id": "review", "maxRisk": "CRITICAL", "authority": { "filesystem": "READ_ONLY", "shell": "BOUNDED", "network": "NONE" }, "writeMode": "NONE" },
+    { "id": "repair", "maxRisk": "MEDIUM", "authority": { "filesystem": "WORKTREE_WRITE", "shell": "BOUNDED", "network": "NONE" }, "writeMode": "LEASED_WORKTREE" },
+    { "id": "docs", "maxRisk": "MEDIUM", "authority": { "filesystem": "WORKTREE_WRITE", "shell": "BOUNDED", "network": "NONE" }, "writeMode": "LEASED_WORKTREE" },
+    { "id": "contract", "maxRisk": "CRITICAL", "authority": { "filesystem": "READ_ONLY", "shell": "BOUNDED", "network": "NONE" }, "writeMode": "NONE" },
+    { "id": "dependency", "maxRisk": "MEDIUM", "authority": { "filesystem": "READ_ONLY", "shell": "BOUNDED", "network": "READ_ONLY" }, "writeMode": "NONE" },
+    { "id": "incident", "maxRisk": "CRITICAL", "authority": { "filesystem": "READ_ONLY", "shell": "BOUNDED", "network": "NONE" }, "writeMode": "NONE" }
+  ]
+}
