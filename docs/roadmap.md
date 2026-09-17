@@ -219,8 +219,9 @@ This phase adds a generic agent orchestration layer above the deterministic tool
 ### Current v2.1 progress
 
 * Agent Task v1, Agent Worker v1, and deterministic Agent Route v1 foundation: merged.
-* Agent Task Registry v1 using local SQLite, immutable task identity, optimistic state/revision transitions, append-only event history, explicit retries, and caller-supplied timestamps: implementation complete on the active capability branch.
-* Worker leases, role policies, model adapters, worker discovery, executable agents, and evaluation corpus remain open.
+* Agent Task Registry v1 using local SQLite, immutable task identity, optimistic state/revision transitions, append-only event history, explicit retries, and caller-supplied timestamps: merged.
+* Worker Lease v1 with task-derived read/write mode, repository-level writer exclusivity, bounded TTL, revision/owner checks, explicit expiration, and append-only lease history: implementation complete on the active capability branch.
+* Role policies, model adapters, worker discovery, executable agents, and evaluation corpus remain open.
 
 71. Add Agent Task Contract v1 with explicit repository commit, role, risk, scope, required checks, and bounded authority.
 72. Add Agent Worker Contract v1 with explicit heartbeat time, resources, model inventory, capabilities, load, and read/write capacity.

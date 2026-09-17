@@ -99,7 +99,7 @@ function configure(db) {
 /** @param {DatabaseSync} db */
 function installSchema(db) {
   const version = Number(db.prepare("PRAGMA user_version").get()?.user_version ?? 0);
-  if (version !== 0 && version !== 1) throw new Error(`unsupported agent registry schema version ${version}`);
+  if (![0, 1, 2].includes(version)) throw new Error(`unsupported agent registry schema version ${version}`);
   db.exec(`
     CREATE TABLE IF NOT EXISTS agent_tasks (
       id TEXT PRIMARY KEY,
@@ -141,7 +141,55 @@ function installSchema(db) {
     CREATE TRIGGER IF NOT EXISTS agent_task_events_no_delete
       BEFORE DELETE ON agent_task_events
       BEGIN SELECT RAISE(ABORT, 'agent task events are append-only'); END;
-    PRAGMA user_version = 1;
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_worker_leases (
+      lease_id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL REFERENCES agent_tasks(id) ON DELETE RESTRICT,
+      worker_id TEXT NOT NULL,
+      repository_id TEXT NOT NULL,
+      mode TEXT NOT NULL CHECK(mode IN ('READ_ONLY','WRITE')),
+      acquired_at TEXT NOT NULL,
+      renewed_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),
+      released_at TEXT,
+      release_reason TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS agent_worker_leases_active_task_idx
+      ON agent_worker_leases(task_id) WHERE released_at IS NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS agent_worker_leases_active_write_repository_idx
+      ON agent_worker_leases(repository_id) WHERE released_at IS NULL AND mode = 'WRITE';
+    CREATE INDEX IF NOT EXISTS agent_worker_leases_worker_idx
+      ON agent_worker_leases(worker_id, released_at, expires_at);
+    CREATE INDEX IF NOT EXISTS agent_worker_leases_repository_idx
+      ON agent_worker_leases(repository_id, released_at, expires_at);
+    CREATE TABLE IF NOT EXISTS agent_worker_lease_events (
+      seq INTEGER PRIMARY KEY AUTOINCREMENT,
+      lease_id TEXT NOT NULL REFERENCES agent_worker_leases(lease_id) ON DELETE RESTRICT,
+      task_id TEXT NOT NULL,
+      worker_id TEXT NOT NULL,
+      repository_id TEXT NOT NULL,
+      at TEXT NOT NULL,
+      event TEXT NOT NULL CHECK(event IN ('ACQUIRED','RENEWED','RELEASED','EXPIRED')),
+      revision INTEGER NOT NULL CHECK(revision >= 0),
+      expires_at TEXT NOT NULL,
+      detail TEXT
+    );
+    CREATE INDEX IF NOT EXISTS agent_worker_lease_events_lease_idx ON agent_worker_lease_events(lease_id, seq);
+    CREATE TRIGGER IF NOT EXISTS agent_worker_leases_identity_immutable
+      BEFORE UPDATE OF lease_id, task_id, worker_id, repository_id, mode, acquired_at ON agent_worker_leases
+      BEGIN SELECT RAISE(ABORT, 'agent worker lease identity is immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS agent_worker_leases_no_delete
+      BEFORE DELETE ON agent_worker_leases
+      BEGIN SELECT RAISE(ABORT, 'agent worker leases are retained for audit history'); END;
+    CREATE TRIGGER IF NOT EXISTS agent_worker_lease_events_no_update
+      BEFORE UPDATE ON agent_worker_lease_events
+      BEGIN SELECT RAISE(ABORT, 'agent worker lease events are append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS agent_worker_lease_events_no_delete
+      BEFORE DELETE ON agent_worker_lease_events
+      BEGIN SELECT RAISE(ABORT, 'agent worker lease events are append-only'); END;
+    PRAGMA user_version = 2;
   `);
 }
 

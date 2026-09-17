@@ -123,7 +123,8 @@
     "agent:task": "node scripts/agent-task.js",
     "agent:worker": "node scripts/agent-worker.js",
     "agent:route": "node scripts/agent-route.js",
-    "agent:registry": "node scripts/agent-task-registry.js"
+    "agent:registry": "node scripts/agent-task-registry.js",
+    "agent:lease": "node scripts/agent-worker-lease.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",

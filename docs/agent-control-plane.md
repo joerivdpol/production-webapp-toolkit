@@ -41,6 +41,23 @@ bun run agent:registry -- events --db /private/state/agent-tasks.sqlite --task-i
 
 The registry has no model, network, subprocess, environment, merge, deployment, or production-mutation surface. Worker ownership is intentionally not inferred here; exclusive worker/repository leases are a separate capability.
 
+## Worker and repository leases
+
+`bun run agent:lease` provides Worker Lease v1 on the same private SQLite registry. A lease binds one registered `ROUTED` task to one symbolic worker id for a bounded 30–3600 second TTL. Acquisition, renewal, release, and expiration all use caller-supplied absolute timestamps; the lease engine never reads the system clock.
+
+Lease mode is derived from Agent Task v1 authority. `READ_ONLY` tasks receive read-only leases. A task whose filesystem authority is `WORKTREE_WRITE` receives a `WRITE` lease. Callers cannot request a stronger mode than the task contract. Multiple read-only leases may coexist for one repository, including while a writer exists, but only one unreleased, unexpired `WRITE` lease may own a repository at a time. One task may have only one unreleased lease.
+
+Every lease carries a revision. Renew and release operations require the expected revision and owning worker id, preventing stale controllers or another worker from silently taking over the lease. Expiration is evaluated only when an explicit evaluation time is supplied. Expired and released leases are retained for audit history, and lease events are append-only.
+
+```sh
+bun run agent:lease -- acquire --db /private/state/agent-tasks.sqlite --task-id task:repair:1 --worker-id worker-a --at 2026-09-17T12:01:00Z --ttl-seconds 300 --json
+bun run agent:lease -- renew --db /private/state/agent-tasks.sqlite --lease-id lease:example --worker-id worker-a --revision 0 --at 2026-09-17T12:03:00Z --ttl-seconds 300 --json
+bun run agent:lease -- release --db /private/state/agent-tasks.sqlite --lease-id lease:example --worker-id worker-a --revision 1 --at 2026-09-17T12:04:00Z --reason HANDOFF --json
+bun run agent:lease -- expire --db /private/state/agent-tasks.sqlite --at 2026-09-17T12:10:00Z --json
+```
+
+Lease state is orchestration evidence, not repository or production truth. It does not create a worktree, start a model, execute a command, grant filesystem access, merge code, deploy, or mutate production. Exclusive path-level write scopes remain future work; v1 deliberately establishes the stricter repository-level writer boundary first.
+
 ## Initial roles
 
 The initial safe roles are `diagnose`, `reproduce`, and `review`. They are intended to establish evidence quality before source-modifying automation is enabled. `repair`, `docs`, `contract`, `dependency`, and `incident` are reserved Agent Task v1 roles for later phases with separate policy and execution boundaries.
