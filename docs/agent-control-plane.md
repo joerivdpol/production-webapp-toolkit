@@ -24,6 +24,23 @@ Agent Worker v1 describes worker class, state, observation time, CPU and memory,
 
 Agent Route v1 combines a validated task, validated worker heartbeats, and explicit role routing policy. Routing is deterministic and proposal-only. It does not start a model, create a worktree, execute a command, or mutate a repository.
 
+## Persistent task registry
+
+`bun run agent:registry` provides Agent Task Registry v1 on a caller-supplied local SQLite database. The database location is deployment state and should live outside the public repository. Parent paths and existing database files must be regular non-symlink paths.
+
+Registration validates Agent Task v1, stores its canonical JSON plus SHA256, and is idempotent only when the same task id carries byte-identical canonical content. Reusing an id for different task truth fails closed. Task identity columns and task rows are protected from direct update/delete, while task events are append-only.
+
+State transitions use both expected state and expected revision. This optimistic concurrency boundary prevents a stale controller from overwriting a newer task state. Transition timestamps are explicit caller input and must remain monotone; the registry does not read the system clock. `RUNNING` entries increment the attempt count. `FAILED` or `BLOCKED` tasks can be explicitly requeued through the versioned transition model, while completed, cancelled, and superseded tasks are terminal.
+
+```sh
+bun run agent:registry -- init --db /private/state/agent-tasks.sqlite --json
+bun run agent:registry -- register --db /private/state/agent-tasks.sqlite --task ./task.json --at 2026-09-17T12:00:05Z --json
+bun run agent:registry -- transition --db /private/state/agent-tasks.sqlite --task-id task:diagnose:1 --from QUEUED --to ROUTED --revision 0 --at 2026-09-17T12:01:00Z --json
+bun run agent:registry -- events --db /private/state/agent-tasks.sqlite --task-id task:diagnose:1 --json
+```
+
+The registry has no model, network, subprocess, environment, merge, deployment, or production-mutation surface. Worker ownership is intentionally not inferred here; exclusive worker/repository leases are a separate capability.
+
 ## Initial roles
 
 The initial safe roles are `diagnose`, `reproduce`, and `review`. They are intended to establish evidence quality before source-modifying automation is enabled. `repair`, `docs`, `contract`, `dependency`, and `incident` are reserved Agent Task v1 roles for later phases with separate policy and execution boundaries.
