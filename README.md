@@ -610,6 +610,24 @@ bun run audit:diff-architecture -- \
 
 The audit reads changed-file names through read-only Git diff and reads import-rule source from the exact head commit rather than the mutable worktree. Deleted files cannot introduce new import violations, while `forbid-change` can still make deletion itself visible. Non-JavaScript/TypeScript files targeted by import rules and syntactically malformed changed source fail closed. A passing result is structural diff evidence only; import presence does not prove runtime call paths, data flow, business-rule correctness, or control-flow semantics.
 
+### Controlled agent workflow planning
+
+`bun run agent:workflow:plan` composes the existing Remediation Plan v1 with Agent Safety Policy v1 and an explicit private workflow-boundary policy. It produces proposal dispositions only: `AUTO_FIX_ELIGIBLE`, `PROPOSE_ONLY`, `HUMAN_REQUIRED`, or `BLOCKED`. The workflow planner itself never executes a remediation and always reports `executionAuthorized: false`.
+
+Private workflow boundaries map repository-relative path patterns to either `HUMAN_REQUIRED` or `BLOCKED`. Canonical source documents and secrets/migration/deployment policy files from Agent Safety Policy are additionally protected as human-review paths. Remediation targets with wildcard scope, missing concrete file targets, or `HIGH` risk automatically require human review. An incomplete Agent Safety audit blocks the entire controlled workflow.
+
+A remediation is only labeled `AUTO_FIX_ELIGIBLE` when it already satisfies the separate Safe Autofix v1 low-risk toolkit-owned guardrails and its id is explicitly allowlisted by the private workflow policy. That label does not execute the fix; actual mutation remains a separate explicit `remediation:apply` operation.
+
+```sh
+bun run agent:workflow:plan -- \
+  --root /path/to/repository \
+  --agent-safety-policy /private/path/agent-safety.json \
+  --workflow-policy /private/path/agent-workflow.json \
+  --json
+```
+
+This separation prevents an agent planner from silently crossing canonical business truth, migrations, secrets, deployment, or other private production boundaries. The public toolkit contains the classification engine only; organization-specific protected paths stay in private policy files.
+
 ### PostgreSQL security policy audit
 
 `bun run security:snapshot` validates PostgreSQL Security Snapshot v1. `bun run security:snapshot:postgres:collect` collects read-only catalog evidence through an explicit libpq service. `bun run audit:postgres-security` evaluates that evidence against an explicit version 1 project policy.
