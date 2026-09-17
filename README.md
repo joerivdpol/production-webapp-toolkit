@@ -556,6 +556,19 @@ Useful commands:
 - bun run audit:release . --expected-version 1.1.0
 - bun run release:verify
 
+### Remediation Plan v1
+
+`bun run remediation:plan <repository> --json` now emits versioned Remediation Plan v1 metadata for every missing required repository-quality check. Existing `safe` versus `manual` semantics remain unchanged so the current safe executor stays compatible. Each remediation item additionally declares whether automation is permitted, a `LOW`, `MEDIUM`, or `HIGH` remediation risk, toolkit versus repository ownership, bounded repository-relative file targets, and canonical validation check ids.
+
+The only automatic item remains the toolkit-owned changed-files lint implementation. Missing repository scripts and CI controls remain manual `MEDIUM` risk because their correct implementation depends on the repository toolchain and workflow design. Findings without a deterministic remediation mapping remain manual `HIGH` risk and deliberately carry no invented file targets. Validation commands are not guessed; the plan points to canonical audit checks unless a future controlled capability can prove a deterministic command contract.
+
+```sh
+bun run remediation:plan /path/to/repository --json
+bun run remediation:apply /path/to/repository --dry-run
+```
+
+A machine-readable remediation plan is advisory planning evidence, not permission to mutate a repository. Automatic execution remains separately constrained to deterministic low-risk changes, and the toolkit does not infer application business logic, production truth, secrets, database changes, or deployment actions from a remediation finding.
+
 ### PostgreSQL security policy audit
 
 `bun run security:snapshot` validates PostgreSQL Security Snapshot v1. `bun run security:snapshot:postgres:collect` collects read-only catalog evidence through an explicit libpq service. `bun run audit:postgres-security` evaluates that evidence against an explicit version 1 project policy.
