@@ -134,20 +134,46 @@ function isFrontendArtifactPath(name) {
 
 /** @param {string} value */
 function isLikelyPlaceholder(value) {
-  const normalized = value.trim().toLowerCase();
+  const trimmed = value.trim();
+  const normalized = trimmed.toLowerCase();
   if (normalized.length < 12) return true;
+  if (/^env\(\s*[A-Za-z_][A-Za-z0-9_]*\s*\)$/.test(trimmed)) return true;
+  if (/^\$\{\s*[A-Za-z_][A-Za-z0-9_]*\s*\}$/.test(trimmed)) return true;
   if (/(?:placeholder|example|sample|dummy|fake|fixture|test[-_]?only|changeme|change[-_]?me|replace[-_]?me|redacted|not[-_]?a[-_]?secret|your[-_])/.test(normalized)) return true;
   const compact = normalized.replace(/[^a-z0-9]/g, "");
   return compact.length === 0 || new Set(compact).size <= 2;
 }
 
 /** @param {string} name */
-function isSensitiveAssignmentName(name) {
-  const normalized = name
+function normalizedAssignmentName(name) {
+  return name
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
     .replace(/[^A-Za-z0-9]+/g, "_")
     .toUpperCase();
+}
+
+/** @param {string} name */
+function isSensitiveAssignmentName(name) {
+  const normalized = normalizedAssignmentName(name);
   return /(^|_)(?:SECRET|PASSWORD|PASSWD|TOKEN|AUTH_TOKEN|CREDENTIAL|CREDENTIALS|PRIVATE_KEY|SERVICE_ROLE_KEY|API_KEY|ACCESS_KEY|ADMIN_KEY|MASTER_KEY|ROOT_KEY|SIGNING_KEY)(_|$)/.test(normalized);
+}
+
+/** @param {string} name @param {string} value */
+function isClearlyNonSecretMetadataAssignment(name, value) {
+  const normalized = normalizedAssignmentName(name);
+  const trimmed = value.trim();
+
+  const relativeEndpoint = /^[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~:@!$&'()*+,;=-]+)+$/;
+  const interpolatedEndpoint = /^\$\{[A-Za-z_$][A-Za-z0-9_$.]*\}(?:\/[A-Za-z0-9._~:@!$&'()*+,;=-]+)+$/;
+  if (
+    /(?:_URL|_URI|_ENDPOINT)$/.test(normalized) &&
+    (/^https?:\/\//i.test(trimmed) || relativeEndpoint.test(trimmed) || interpolatedEndpoint.test(trimmed))
+  ) return true;
+  if (/_PATH$/.test(normalized) && /^(?:[./~]|[A-Za-z]:[\\/])/.test(trimmed)) return true;
+  if (/(?:_FILE|_FILE_NAME|_FILENAME)$/.test(normalized) && /^[A-Za-z0-9._/~-]+$/.test(trimmed)) return true;
+  if (/(?:_ENVIRONMENT_KEY|_ENV_KEY|_VARIABLE|_VARIABLE_NAME|_KEY_NAME)$/.test(normalized) && /^[A-Z][A-Z0-9_]*$/.test(trimmed)) return true;
+
+  return false;
 }
 
 /** @param {string} text */
@@ -160,7 +186,13 @@ function containsHardcodedSecretAssignment(text) {
     for (const match of text.matchAll(pattern)) {
       const name = match[1];
       const value = match[2];
-      if (name && value && isSensitiveAssignmentName(name) && !isLikelyPlaceholder(value)) return true;
+      if (
+        name &&
+        value &&
+        isSensitiveAssignmentName(name) &&
+        !isLikelyPlaceholder(value) &&
+        !isClearlyNonSecretMetadataAssignment(name, value)
+      ) return true;
     }
   }
   return false;

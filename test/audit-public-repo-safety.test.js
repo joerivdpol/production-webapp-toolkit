@@ -203,6 +203,39 @@ test("blocks generic hardcoded sensitive assignments but permits clear placehold
   assert.equal(inspectPublicRepoSafety(placeholderRoot).passed, true);
 });
 
+test("permits explicit environment indirection and clearly typed secret metadata", () => {
+  const root = createGitRepository();
+
+  track(
+    root,
+    "src/config.js",
+    [
+      'const OPENAI_API_KEY = "env(OPENAI_API_KEY)";',
+      'const SERVICE_ROLE_KEY = "${SUPABASE_SERVICE_ROLE_KEY}";',
+      'const TOKEN_URL = "https://provider.example.invalid/oauth/token";',
+      'const REFRESH_TOKEN_ENDPOINT = "oauth/v2/refresh-token";',
+      'const INTERPOLATED_TOKEN_URL = "${PROVIDER_ORIGIN}/oauth/token";',
+      'const CREDENTIAL_PATH = "/run/secrets/provider-credential";',
+      'const CREDENTIAL_FILE_NAME = "provider-credential.json";',
+      'const CREDENTIAL_PATH_ENVIRONMENT_KEY = "PROVIDER_CREDENTIAL_PATH";',
+      "",
+    ].join("\n"),
+  );
+
+  assert.equal(inspectPublicRepoSafety(root).passed, true);
+});
+
+test("does not let metadata names suppress an actual hardcoded secret", () => {
+  const root = createGitRepository();
+  const value = ["live", "credential", "material", "987654321"].join("-");
+
+  track(root, "src/config.js", `const PAYMENT_SECRET = ${JSON.stringify(value)};\n`);
+
+  const report = inspectPublicRepoSafety(root);
+  assert.ok(report.findings.some((item) => item.rule === "hardcoded-secret-assignment"));
+  assert.equal(formatPublicRepoSafety(report).includes(value), false);
+});
+
 test("blocks registry credentials in npm and Docker configuration", () => {
   const npmRoot = createGitRepository();
   const npmToken = ["registry", "credential", "1234567890"].join("-");
