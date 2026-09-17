@@ -114,6 +114,29 @@ The public capability deliberately includes no heartbeat transport. A persistent
 
 The example `templates/agent-worker-declaration.v1.json` contains generic symbolic ids only. Operators must replace it with their own private declaration and capacity policy.
 
+## Diagnosis Agent v1
+
+`bun run agent:diagnose` is the first executable AI role. It remains read-only: one exact Agent Task v1 with role `diagnose`, one Agent Role Policy v1, one explicit Diagnosis Input v1 evidence file, and one private worker-local model configuration are composed into evidence-bound hypotheses.
+
+Diagnosis Input v1 binds evidence to the exact task repository id and source commit. Every evidence record has a portable id, source id, explicit status, bounded summary, and optional repository-relative path. Changed files and already-known unknowns are explicit inputs. The model is not allowed to inspect arbitrary additional sources through this command.
+
+The model must return Diagnosis Result v1 JSON. Every hypothesis must cite one or more evidence ids that already exist in the input. Verification proposals and the recommended next step can only be classified as `INSPECT`, `TEST`, or `QUERY`. Unknown evidence references, malformed JSON, unsupported action classes, wrong task/repository binding, non-diagnose roles, or write-authorized diagnosis tasks fail closed.
+
+Validated output always carries `executionAuthorized: false`, `sourceMutationAuthorized: false`, and `rootCauseEstablished: false`. A diagnosis is therefore a set of evidence-backed hypotheses that still require verification. Model confidence or fluent prose never upgrades a hypothesis into canonical root-cause truth.
+
+```sh
+bun run agent:diagnose -- \
+  --task /private/tasks/diagnose-task.json \
+  --role-policy /private/policy/agent-roles.json \
+  --input /private/tasks/diagnosis-input.json \
+  --model-config /private/config/model-backends.json \
+  --backend worker-local \
+  --model small-local \
+  --json
+```
+
+Diagnosis v1 does not execute verification proposals. The later Reproduction Agent is responsible for turning a verified diagnosis target into an isolated failing regression test under a separate leased-worktree write boundary.
+
 ## Initial roles
 
 The initial safe roles are `diagnose`, `reproduce`, and `review`. They are intended to establish evidence quality before source-modifying automation is enabled. `repair`, `docs`, `contract`, `dependency`, and `incident` are reserved Agent Task v1 roles for later phases with separate policy and execution boundaries.
