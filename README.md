@@ -1865,3 +1865,45 @@ bun run ecosystem:history -- \
 A valid comparison always exits zero even when repositories regressed. Regression is descriptive historical information, not a substitute for the current dashboard gate. The output carries previous and current overall/technical truth exactly as stored in the validated snapshots and states that it never recomputes them into a new policy result. Invalid/tampered snapshots or non-increasing snapshot time are input failures and exit nonzero.
 
 The comparator is offline and read only. It performs no Git, provider, runtime, environment, or production access and never mutates dashboard evidence.
+
+### Scheduled reporting and notification planning
+
+`bun run report:plan` validates Scheduled Reporting Policy v1 and produces a deterministic machine-readable report/notification plan from the current Ecosystem Dashboard v1 snapshot and an optional previous snapshot. The public toolkit does not run a daemon, cron scheduler, webhook client, email client, or chat bot. An external scheduler invokes the command at the configured cadence and a separate private sink bridge may consume the plan.
+
+Schedules are declarative and support `HOURLY`, `DAILY`, and `WEEKLY` cadence with an explicit ICU-recognized timezone. Hourly schedules declare a minute; daily schedules declare hour/minute; weekly schedules declare weekday/hour/minute. Schedule ids and sink ids are symbolic tokens only. URLs, webhook destinations, credentials, and provider-specific routing are intentionally outside the contract.
+
+Notification triggers may include current ecosystem `WARN`/`FAIL`, current technical failure, repository-level regression from the validated historical comparison, repository additions, and repository removals. Regression triggers remain inactive when no previous dashboard is supplied rather than inventing history. The scheduled report itself is always produced; notification delivery is only planned when one or more configured triggers match.
+
+```json
+{
+  "version": 1,
+  "schedule": {
+    "id": "daily-readiness",
+    "cadence": "DAILY",
+    "timezone": "Asia/Jakarta",
+    "hour": 8,
+    "minute": 0
+  },
+  "notification": {
+    "sinks": ["engineering-alerts"],
+    "onOverall": ["WARN", "FAIL"],
+    "onTechnicalFailure": true,
+    "onRegression": true,
+    "onRepositoryAdded": false,
+    "onRepositoryRemoved": true
+  }
+}
+```
+
+```sh
+bun run report:plan -- \
+  --policy ./scheduled-reporting-policy.json \
+  --current ./ecosystem-current.json \
+  --previous ./ecosystem-previous.json \
+  --evaluated-at 2026-09-17T08:05:00Z \
+  --json
+```
+
+The planner creates a deterministic SHA256 event id bound to schedule metadata, evaluation time, current/previous snapshot times, trigger reasons, and sink ids. That id is intended for downstream idempotency; the toolkit itself does not mark events delivered or persist delivery state. A current dashboard newer than the explicit evaluation time, an invalid historical ordering, or invalid/tampered dashboard input fails closed.
+
+This capability is offline and read only. It does not send notifications, store credentials, contact providers, schedule operating-system jobs, or mutate report evidence.

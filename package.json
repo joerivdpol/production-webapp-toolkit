@@ -111,7 +111,8 @@
     "policy:organization": "node scripts/organization-policy.js",
     "check:evidence": "node scripts/repository-check-evidence.js",
     "ecosystem:dashboard": "node scripts/ecosystem-dashboard.js",
-    "ecosystem:history": "node scripts/compare-ecosystem-history.js"
+    "ecosystem:history": "node scripts/compare-ecosystem-history.js",
+    "report:plan": "node scripts/scheduled-reporting.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
