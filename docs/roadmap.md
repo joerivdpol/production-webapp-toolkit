@@ -177,8 +177,9 @@ Core principles:
 * Safe Autofix v1 hardens automatic remediation to explicit low-risk toolkit-owned allowlisted actions with symlink/path containment, exclusive creation, exact-copy verification, and canonical post-apply validation: merged.
 * Agent Safety Policy v1 binds AGENTS.md to explicit canonical sources, exact fenced test commands, and secrets/migration/deployment boundary policy files without interpreting private policy contents: merged.
 * Diff-aware Architecture Policy v1 selects private rule packs from Repository Manifest profile/capabilities and evaluates only commit-bound changed files with forbid-change, forbid-import, and require-import rules: merged.
-* Controlled Agent Workflow v1 composes remediation planning, Agent Safety evidence, and private protected-path policy into proposal-only autofix/propose/human/blocked dispositions with execution explicitly unauthorized: implementation complete on the active capability branch.
-* Release evidence bundles and the remaining controlled-automation capabilities remain open.
+* Controlled Agent Workflow v1 composes remediation planning, Agent Safety evidence, and private protected-path policy into proposal-only autofix/propose/human/blocked dispositions with execution explicitly unauthorized: merged.
+* Release Evidence Bundle v1 hashes and cross-validates canonical CI, dependency, vulnerability, artifact provenance, runtime deployment, runtime health, baseline, and optional private policy evidence without copying underlying payloads: implementation complete on the active capability branch.
+* Optional compliance export formats and the remaining controlled-automation capabilities remain open.
 
 63. Expand machine readable remediation plans with risk, ownership, files, and validation requirements.
 64. Add safe autofix only for deterministic low risk repository configuration changes.
