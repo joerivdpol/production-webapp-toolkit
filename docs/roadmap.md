@@ -180,8 +180,9 @@ Core principles:
 * Controlled Agent Workflow v1 composes remediation planning, Agent Safety evidence, and private protected-path policy into proposal-only autofix/propose/human/blocked dispositions with execution explicitly unauthorized: merged.
 * Release Evidence Bundle v1 hashes and cross-validates canonical CI, dependency, vulnerability, artifact provenance, runtime deployment, runtime health, baseline, and optional private policy evidence without copying underlying payloads: merged.
 * Generic Control Evidence Export v1 validates standalone release bundles and emits optional JSON/CSV evidence-coverage exports with explicit `complianceClaim: false` and no built-in standards claims: merged.
-* Deployment Gate v1 combines validated release and rollback evidence with explicit trust, CI, runtime-health, vulnerability, and rollback policy into ALLOW/BLOCK/UNVERIFIED decisions while retaining no execution surface: implemented.
+* Deployment Gate v1 combines validated release and rollback evidence with explicit trust, CI, runtime-health, vulnerability, and rollback policy into ALLOW/BLOCK/UNVERIFIED decisions while retaining no execution surface: merged.
 * v2.0 controlled-automation roadmap capabilities are complete in the current source tree.
+* v2.0.0 release closeout includes current-version release readiness and release notes; publication is performed only after a green release PR.
 
 63. Expand machine readable remediation plans with risk, ownership, files, and validation requirements.
 64. Add safe autofix only for deterministic low risk repository configuration changes.

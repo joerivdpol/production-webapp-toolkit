@@ -4,14 +4,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const REQUIRED_SCRIPTS = [
+export const V1_REQUIRED_SCRIPTS = [
   "typecheck", "test", "lint", "build", "check", "lint:changed",
   "audit:safety", "audit:git-governance", "audit:production-baseline",
   "audit:deployment", "audit:repository-status", "audit:ecosystem-status",
   "audit:release", "runtime:evidence", "release:verify",
 ];
 
-const REQUIRED_CAPABILITIES = [
+export const V1_REQUIRED_CAPABILITIES = [
   "audit-profiled-repository.js",
   "audit-profiled-ecosystem.js",
   "audit-dependency-drift.js",
@@ -23,6 +23,59 @@ const REQUIRED_CAPABILITIES = [
   "runtime-evidence.js",
   "audit-repository-status.js",
   "audit-ecosystem-status.js",
+];
+
+export const V2_REQUIRED_SCRIPTS = [
+  "audit", "audit:all", "audit:profiled", "audit:ecosystem", "audit:python", "audit:drift", "audit:architecture",
+  "bootstrap", "remediation:plan", "remediation:apply",
+  "audit:ci", "ci:evidence", "ci:evidence:github-actions", "ci:evidence:github-actions:collect",
+  "audit:github-protection", "audit:env-contract", "audit:env-exposure", "audit:migration-safety",
+  "schema:snapshot", "schema:snapshot:postgres:collect", "audit:schema-drift",
+  "security:snapshot", "security:snapshot:postgres:collect", "audit:postgres-security",
+  "api:contract", "api:contract:openapi", "audit:api-contract", "contract:inventory", "audit:cross-contracts",
+  "vulnerability:evidence", "vulnerability:osv:collect", "vulnerability:github:collect", "audit:vulnerabilities",
+  "sbom:generate", "license:evidence", "license:collect:installed", "audit:licenses", "audit:reproducibility",
+  "artifact:provenance", "audit:artifact-provenance", "change:evidence", "audit:release-risk", "change:analyze",
+  "test:select", "audit:flaky-tests", "coverage:evidence", "audit:coverage", "orphan:evidence",
+  "orphan:collect:static", "audit:orphans", "audit:hygiene", "audit:docs", "audit:ownership",
+  "runtime:collector:adapt", "runtime:checkout:collect", "runtime:application:collect", "runtime:container:collect",
+  "runtime:process:collect", "runtime:health:evidence", "audit:runtime-health", "runtime:smoke", "runtime:frontend",
+  "performance:evidence", "audit:performance", "runtime:accessibility", "runtime:seo", "audit:localization",
+  "route:inventory", "audit:route-coverage", "audit:authorization", "audit:webhook-safety", "audit:payment-integrity",
+  "booking:integrity:evidence", "audit:booking-integrity", "audit:jobs", "backup:evidence", "audit:backup-readiness",
+  "dr:contract", "audit:dr-readiness", "rollback:contract", "audit:rollback-readiness",
+  "manifest:validate", "policy:resolve", "policy:organization", "check:evidence", "ecosystem:dashboard",
+  "ecosystem:history", "report:plan", "policy:severity", "audit:agent-safety", "audit:diff-architecture",
+  "agent:workflow:plan", "release:evidence:bundle", "release:evidence:export", "deployment:gate",
+];
+
+export const V2_REQUIRED_CAPABILITIES = [
+  "audit-repository.js", "audit-all-repositories.js", "audit-python-service.js", "detect-repository-profile.js",
+  "bootstrap-repository.js", "plan-remediation.js", "apply-remediation.js", "lint-changed.js", "audit-release-readiness.js",
+  "audit-ci-verification.js", "ci-evidence.js", "github-actions-ci-evidence.js", "collect-github-actions-ci-evidence.js",
+  "audit-github-protection.js", "audit-environment-contract.js", "audit-client-env-exposure.js", "audit-migration-safety.js",
+  "database-schema-snapshot.js", "collect-postgres-schema-snapshot.js", "audit-database-schema-drift.js",
+  "postgres-security-snapshot.js", "collect-postgres-security-snapshot.js", "audit-postgres-security.js",
+  "api-contract-snapshot.js", "openapi-api-contract.js", "audit-api-contract.js", "contract-inventory.js",
+  "audit-cross-repository-contracts.js", "vulnerability-evidence.js", "collect-osv-vulnerability-evidence.js",
+  "collect-github-dependabot-evidence.js", "audit-vulnerabilities.js", "generate-sbom.js", "license-evidence.js",
+  "collect-installed-license-evidence.js", "audit-licenses.js", "audit-build-reproducibility.js", "artifact-provenance.js",
+  "audit-artifact-provenance.js", "change-surface-evidence.js", "audit-release-risk.js", "analyze-changed-surface.js",
+  "select-tests.js", "audit-flaky-tests.js", "coverage-comparison-evidence.js", "audit-coverage-regression.js",
+  "orphan-evidence.js", "collect-static-orphan-evidence.js", "audit-orphans.js", "audit-repository-hygiene.js",
+  "audit-documentation-drift.js", "audit-codeowners-ownership.js", "runtime-collector-adapter.js",
+  "collect-git-checkout-runtime-evidence.js", "collect-application-runtime-evidence.js",
+  "collect-docker-container-runtime-evidence.js", "collect-process-runtime-evidence.js", "runtime-health-evidence.js",
+  "audit-runtime-health.js", "run-synthetic-smoke-tests.js", "run-frontend-runtime-checks.js", "performance-evidence.js",
+  "audit-performance-budgets.js", "run-accessibility-gates.js", "run-seo-production-checks.js",
+  "audit-localization-completeness.js", "route-inventory.js", "audit-route-coverage.js", "audit-authorization-policy.js",
+  "audit-webhook-safety.js", "audit-payment-integrity.js", "booking-integrity-evidence.js", "audit-booking-integrity.js",
+  "audit-job-scheduler.js", "backup-readiness-evidence.js", "audit-backup-readiness.js", "disaster-recovery-contract.js",
+  "audit-disaster-recovery.js", "rollback-readiness-contract.js", "audit-rollback-readiness.js", "repository-manifest.js",
+  "policy-packs.js", "organization-policy.js", "repository-check-evidence.js", "ecosystem-dashboard.js",
+  "compare-ecosystem-history.js", "scheduled-reporting.js", "severity-policy.js", "audit-agent-safety.js",
+  "audit-diff-architecture.js", "controlled-agent-workflow.js", "release-evidence-bundle.js",
+  "export-compliance-evidence.js", "deployment-gate.js",
 ];
 /** @param {string} file */
 function readText(file) {
@@ -41,7 +94,17 @@ function pinnedBunVersion(value) {
 
 /** @param {string} value */
 function exactVersion(value) {
-  return /^\d+\.\d+\.\d+$/.test(value);
+  return /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(value);
+}
+
+/** @param {string} value */
+function releasableVersion(value) {
+  return /^[1-9]\d*\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(value);
+}
+
+/** @param {string} value */
+function versionMajor(value) {
+  return releasableVersion(value) ? Number(value.split(".")[0]) : null;
 }
 
 /** @param {string} nodeVersion @param {unknown} engine */
@@ -65,7 +128,6 @@ export function inspectReleaseReadiness(root, options = {}) {
   const roadmapPath = path.join(root, "docs", "roadmap.md");
   const ciPath = path.join(root, ".github", "workflows", "ci.yml");
   const nodeVersionPath = path.join(root, ".node-version");
-  const releaseNotesPath = path.join(root, "docs", "releases", "v1.1.0.md");
   const lockfilePath = fs.existsSync(path.join(root, "bun.lock"))
     ? path.join(root, "bun.lock")
     : path.join(root, "bun.lockb");
@@ -74,15 +136,23 @@ export function inspectReleaseReadiness(root, options = {}) {
   const readme = readText(readmePath);
   const roadmap = readText(roadmapPath);
   const ci = readText(ciPath);
-  const releaseNotes = readText(releaseNotesPath);
   const nodeVersion = readText(nodeVersionPath).trim();
   const bunVersion = pinnedBunVersion(pkg.packageManager);
   const expectedVersion = options.expectedVersion ?? null;
+  const targetVersion = expectedVersion ?? pkg.version ?? "";
+  const targetMajor = versionMajor(targetVersion);
+  const releaseNotesPath = releasableVersion(targetVersion)
+    ? path.join(root, "docs", "releases", `v${targetVersion}.md`)
+    : path.join(root, "docs", "releases", "invalid-version.md");
+  const releaseNotes = readText(releaseNotesPath);
+  const isV2 = targetMajor !== null && targetMajor >= 2;
+  const requiredScripts = isV2 ? [...V1_REQUIRED_SCRIPTS, ...V2_REQUIRED_SCRIPTS] : V1_REQUIRED_SCRIPTS;
+  const requiredCapabilities = isV2 ? [...V1_REQUIRED_CAPABILITIES, ...V2_REQUIRED_CAPABILITIES] : V1_REQUIRED_CAPABILITIES;
 
   const checks = [
     {
       id: "version-semver",
-      passed: /^1\.\d+\.\d+$/.test(pkg.version ?? ""),
+      passed: typeof pkg.version === "string" && releasableVersion(pkg.version),
       detail: `package version is ${pkg.version ?? "(missing)"}`,
     },
     {
@@ -108,13 +178,13 @@ export function inspectReleaseReadiness(root, options = {}) {
     },
     {
       id: "standard-scripts",
-      passed: REQUIRED_SCRIPTS.every((name) => typeof pkg.scripts?.[name] === "string"),
-      detail: "v1.1 quality, evidence, status, and release scripts are present",
+      passed: requiredScripts.every((name) => typeof pkg.scripts?.[name] === "string"),
+      detail: isV2 ? "v2.0 quality, evidence, runtime, policy, and controlled-automation scripts are present" : "v1.1 quality, evidence, status, and release scripts are present",
     },
     {
       id: "capabilities-present",
-      passed: REQUIRED_CAPABILITIES.every((name) => fs.existsSync(path.join(root, "scripts", name))),
-      detail: "v1.1 audit and runtime-evidence capabilities are present",
+      passed: requiredCapabilities.every((name) => fs.existsSync(path.join(root, "scripts", name))),
+      detail: isV2 ? "v2.0 production-readiness control-plane capabilities are present" : "v1.1 audit and runtime-evidence capabilities are present",
     },
     {
       id: "ci-node-pinned",
@@ -153,13 +223,13 @@ export function inspectReleaseReadiness(root, options = {}) {
     },
     {
       id: "roadmap-present",
-      passed: roadmap.includes("## v1.1") && roadmap.includes("## v2"),
-      detail: "public roadmap covers v1.1 through v2",
+      passed: roadmap.includes("## v1.1") && roadmap.includes("## v2.0 Controlled automation") && (!isV2 || /v2\.0 controlled-automation roadmap capabilities are complete/i.test(roadmap)),
+      detail: isV2 ? "public roadmap marks the v2.0 controlled-automation capability plan complete" : "public roadmap covers v1.1 through v2",
     },
     {
       id: "release-notes-present",
-      passed: releaseNotes.includes("Production Webapp Toolkit v1.1.0") && releaseNotes.includes("## Status semantics") && releaseNotes.includes("## Trust boundaries"),
-      detail: "v1.1.0 release notes document status and trust semantics",
+      passed: releaseNotes.includes(`Production Webapp Toolkit v${targetVersion}`) && releaseNotes.includes("## Status semantics") && releaseNotes.includes("## Trust boundaries") && (!isV2 || releaseNotes.includes("## Upgrade notes")),
+      detail: isV2 ? `v${targetVersion} release notes document status, trust boundaries, and upgrade notes` : `v${targetVersion} release notes document status and trust semantics`,
     },
     {
       id: "readme-toolchain",
@@ -191,11 +261,18 @@ export function inspectReleaseReadiness(root, options = {}) {
       passed: readme.includes("Repository status") && readme.includes("Ecosystem status") && readme.includes("DEPLOYMENT"),
       detail: "README documents repository and ecosystem deployment status",
     },
+    {
+      id: "readme-current-release",
+      passed: !isV2 || (readme.includes("## v2.0 capability surface") && readme.includes("deployment:gate") && readme.includes("release:evidence:bundle")),
+      detail: isV2 ? "README documents the v2.0 capability surface and final release/deployment evidence entrypoints" : "v2.0 README release surface is not required for this target",
+    },
   ];
 
   return {
     version: pkg.version,
     expectedVersion,
+    targetVersion,
+    targetMajor,
     nodeVersion,
     bunVersion,
     ready: checks.every((check) => check.passed),
@@ -205,12 +282,12 @@ export function inspectReleaseReadiness(root, options = {}) {
 
 /** @param {ReturnType<typeof inspectReleaseReadiness>} report */
 export function formatReleaseReadiness(report) {
-  const lines = ["Production Webapp Toolkit v1.1 release readiness", ""];
+  const target = report.expectedVersion ?? report.version;
+  const lines = [`Production Webapp Toolkit v${target} release readiness`, ""];
   for (const check of report.checks) {
     lines.push(`${check.passed ? "PASS" : "MISS"}  ${check.id}  ${check.detail}`);
   }
   lines.push("");
-  const target = report.expectedVersion ?? report.version;
   lines.push(report.ready ? `Result: READY FOR v${target}` : `Result: NOT READY FOR v${target}`);
   return lines.join("\n");
 }
@@ -225,7 +302,7 @@ function parseArguments(argv) {
       json = true;
     } else if (argument === "--expected-version") {
       const value = argv[index + 1];
-      if (expectedVersion !== null || typeof value !== "string" || !/^1\.\d+\.\d+$/.test(value)) return null;
+      if (expectedVersion !== null || typeof value !== "string" || !releasableVersion(value)) return null;
       expectedVersion = value;
       index += 1;
     } else if (typeof argument === "string" && !argument.startsWith("-") && target === null) {
@@ -240,7 +317,7 @@ function parseArguments(argv) {
 export function main(argv = process.argv.slice(2)) {
   const options = parseArguments(argv);
   if (!options) {
-    console.error("Usage: node scripts/audit-release-readiness.js [repository] [--expected-version <1.x.y>] [--json]");
+    console.error("Usage: node scripts/audit-release-readiness.js [repository] [--expected-version <x.y.z>] [--json]");
     return 1;
   }
   const root = path.resolve(options.target ?? process.cwd());

@@ -12,7 +12,7 @@ The changed-files strategy acts as a ratchet. [`scripts/lint-changed.js`](script
 
 ## Quick start
 
-The reference toolchain is Node.js 24.21.0 and Bun 1.3.14. CI uses the same pinned versions. The supported Node.js engine range for v1.1 is 24.x.
+The reference toolchain is Node.js 24.21.0 and Bun 1.3.14. CI uses the same pinned versions. The current v2.0 supported Node.js engine range is 24.x.
 
 ```sh
 bun install --frozen-lockfile
@@ -528,6 +528,23 @@ See [`docs/standard.md`](docs/standard.md) for the architecture and required/opt
 ## License
 
 MIT
+
+## v2.0 capability surface
+
+Production Webapp Toolkit v2.0 is the current public capability surface. It extends the original repository-quality toolkit into a generic production-readiness control plane while keeping application business truth, credentials, customer data, and private organization policy outside the public repository.
+
+The v2.0 surface includes CI and GitHub evidence, environment and secret-exposure contracts, migration/schema/security auditing, API and cross-repository contracts, dependency/vulnerability/SBOM/license controls, reproducibility and artifact provenance, release-risk and changed-surface analysis, test/coverage/orphan/hygiene/documentation/ownership checks, runtime collectors and health/smoke/browser/performance/accessibility/SEO/localization gates, route/auth/webhook/payment/booking/job/backup/DR/rollback readiness, repository manifests and policy packs, private organization inheritance, ecosystem dashboards/history/report planning/severity, controlled agent workflows, release evidence bundles, generic compliance evidence export, and the read-only policy-driven `deployment:gate`.
+
+The final deployment gate consumes validated `release:evidence:bundle` and rollback-readiness evidence. It returns `ALLOW`, `UNVERIFIED`, or `BLOCK`; it does not execute or independently authorize a deployment. Existing v1.1 commands and versioned contracts remain available unless explicitly superseded by a newer contract version.
+
+Current release verification:
+
+```sh
+bun run release:verify
+bun run audit:release . --expected-version 2.0.0
+```
+
+The historical v1.1 capability surface is retained below for upgrade context.
 
 ## v1.1 capability surface
 
