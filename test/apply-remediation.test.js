@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { applySafeRemediation } from "../scripts/apply-remediation.js";
+import { applySafeRemediation, isSafeAutofixEligible } from "../scripts/apply-remediation.js";
 
 function createBaseRepository() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "apply-remediation-"));
@@ -165,4 +165,110 @@ test("safe remediation is idempotent after the first apply", () => {
     fs.readFileSync(destination, "utf8"),
     firstContent,
   );
+});
+
+
+test("safe autofix eligibility requires every low-risk toolkit guard", () => {
+  const eligible = {
+    id: "changed-lint-script",
+    remediation: "safe",
+    automatic: true,
+    risk: "LOW",
+    ownership: "toolkit",
+    validation: { checks: ["changed-lint-script"], commands: [] },
+  };
+
+  assert.equal(isSafeAutofixEligible(eligible), true);
+  assert.equal(isSafeAutofixEligible({ ...eligible, automatic: false }), false);
+  assert.equal(isSafeAutofixEligible({ ...eligible, risk: "MEDIUM" }), false);
+  assert.equal(isSafeAutofixEligible({ ...eligible, ownership: "repository" }), false);
+  assert.equal(isSafeAutofixEligible({ ...eligible, id: "ci-build" }), false);
+  assert.equal(
+    isSafeAutofixEligible({ ...eligible, validation: { checks: [], commands: [] } }),
+    false,
+  );
+});
+
+test("dry-run exposes deterministic low-risk action metadata without writes", () => {
+  const root = createBaseRepository();
+  const result = applySafeRemediation(root, { dryRun: true });
+  const action = result.actions[0];
+
+  assert.equal(result.version, 1);
+  assert.ok(action);
+  assert.equal(action.relativePath, "scripts/lint-changed.js");
+  assert.equal(action.risk, "LOW");
+  assert.match(action.sourceSha256, /^[a-f0-9]{64}$/);
+  assert.deepEqual(action.validationChecks, ["changed-lint-script"]);
+  assert.deepEqual(result.validation, { performed: false, passed: true, checks: [] });
+  assert.equal(fs.existsSync(path.join(root, action.relativePath)), false);
+});
+
+test("applied autofix verifies copied content and clears its canonical finding", () => {
+  const root = createBaseRepository();
+  const result = applySafeRemediation(root);
+  const action = result.actions[0];
+
+  assert.ok(action);
+  assert.equal(result.validation.performed, true);
+  assert.equal(result.validation.passed, true);
+  assert.deepEqual(result.validation.checks, [
+    { id: "changed-lint-script", passed: true },
+  ]);
+  assert.equal(
+    fs.readFileSync(path.join(root, action.relativePath), "utf8"),
+    fs.readFileSync(path.resolve("scripts/lint-changed.js"), "utf8"),
+  );
+});
+
+test("safe autofix refuses a symlinked repository root", () => {
+  const root = createBaseRepository();
+  const parent = fs.mkdtempSync(path.join(os.tmpdir(), "autofix-root-link-"));
+  const linkedRoot = path.join(parent, "repository");
+  fs.symlinkSync(root, linkedRoot, "dir");
+
+  assert.throws(
+    () => applySafeRemediation(linkedRoot),
+    /regular directory, not a symlink/,
+  );
+  assert.equal(fs.existsSync(path.join(root, "scripts", "lint-changed.js")), false);
+});
+
+test("safe autofix refuses a symlinked parent and never writes outside the repository", () => {
+  const root = createBaseRepository();
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "autofix-outside-"));
+  fs.symlinkSync(outside, path.join(root, "scripts"), "dir");
+
+  assert.throws(
+    () => applySafeRemediation(root),
+    /symlink parent/,
+  );
+  assert.equal(fs.existsSync(path.join(outside, "lint-changed.js")), false);
+});
+
+test("existing destination remains untouched and produces no autofix action", () => {
+  const root = createBaseRepository();
+  fs.mkdirSync(path.join(root, "scripts"), { recursive: true });
+  const destination = path.join(root, "scripts", "lint-changed.js");
+  const existing = "// repository owned implementation\n";
+  fs.writeFileSync(destination, existing);
+
+  const result = applySafeRemediation(root);
+
+  assert.equal(result.actions.length, 0);
+  assert.equal(fs.readFileSync(destination, "utf8"), existing);
+});
+
+test("dry-run refuses dangling symlink destinations instead of reporting a create", () => {
+  const root = createBaseRepository();
+  fs.mkdirSync(path.join(root, "scripts"), { recursive: true });
+  const destination = path.join(root, "scripts", "lint-changed.js");
+  const missingTarget = path.join(root, "missing-toolkit-target.js");
+  fs.symlinkSync(missingTarget, destination);
+
+  assert.throws(
+    () => applySafeRemediation(root, { dryRun: true }),
+    /refuses to overwrite an existing destination/,
+  );
+  assert.equal(fs.lstatSync(destination).isSymbolicLink(), true);
 });

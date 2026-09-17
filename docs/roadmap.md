@@ -173,8 +173,9 @@ Core principles:
 
 ### Current v2.0 progress
 
-* Remediation Plan v1 expands existing remediation output with automation posture, remediation risk, ownership, repository-relative file targets, and canonical validation requirements while preserving the existing safe/manual executor contract: implementation complete on the active capability branch.
-* Safe autofix expansion and the remaining controlled-automation capabilities remain open.
+* Remediation Plan v1 expands existing remediation output with automation posture, remediation risk, ownership, repository-relative file targets, and canonical validation requirements while preserving the existing safe/manual executor contract: merged.
+* Safe Autofix v1 hardens automatic remediation to explicit low-risk toolkit-owned allowlisted actions with symlink/path containment, exclusive creation, exact-copy verification, and canonical post-apply validation: implementation complete on the active capability branch.
+* AI agent safety profiles and the remaining controlled-automation capabilities remain open.
 
 63. Expand machine readable remediation plans with risk, ownership, files, and validation requirements.
 64. Add safe autofix only for deterministic low risk repository configuration changes.

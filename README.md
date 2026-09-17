@@ -569,6 +569,14 @@ bun run remediation:apply /path/to/repository --dry-run
 
 A machine-readable remediation plan is advisory planning evidence, not permission to mutate a repository. Automatic execution remains separately constrained to deterministic low-risk changes, and the toolkit does not infer application business logic, production truth, secrets, database changes, or deployment actions from a remediation finding.
 
+### Safe autofix boundary
+
+`bun run remediation:apply <repository>` executes only remediation items that are simultaneously marked `safe`, `automatic: true`, `risk: LOW`, and `ownership: toolkit`, and whose id is on the executor's explicit autofix allowlist. At present the only automatic change remains creation of the toolkit-owned `scripts/lint-changed.js` implementation. Repository scripts, CI workflows, migrations, application code, policy files, secrets, databases, and deployment configuration remain outside automatic mutation.
+
+Before writing, the executor requires a regular non-symlink repository root, refuses symlinked or non-directory parent components, rejects any existing lexical destination including dangling symlinks, and writes with exclusive-create semantics. The source must be a non-empty regular toolkit file. After copying, the executor verifies the destination SHA256 against the toolkit source and re-runs the canonical remediation planner to prove that the intended finding is gone. `--dry-run` performs the same eligibility and path-safety checks without creating files.
+
+These constraints are fail-closed guardrails, not a generic patch engine. A future planner bug cannot make a medium/high-risk or repository-owned item executable merely by labeling it `safe`; all autofix metadata must agree and the implementation id must already be explicitly supported.
+
 ### PostgreSQL security policy audit
 
 `bun run security:snapshot` validates PostgreSQL Security Snapshot v1. `bun run security:snapshot:postgres:collect` collects read-only catalog evidence through an explicit libpq service. `bun run audit:postgres-security` evaluates that evidence against an explicit version 1 project policy.
