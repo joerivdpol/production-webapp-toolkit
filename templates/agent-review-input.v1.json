@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "taskId": "task:review-example",
+  "repository": {
+    "id": "example-repository",
+    "commit": "0123456789abcdef0123456789abcdef01234567"
+  },
+  "evidence": [
+    {
+      "id": "ci-failure",
+      "source": "ci",
+      "status": "FAIL",
+      "summary": "A regression check failed",
+      "path": "src/example.ts"
+    }
+  ],
+  "proposal": {
+    "id": "proposal-example",
+    "kind": "PATCH",
+    "sourceTaskId": "task:proposal-example",
+    "summary": "Bounded proposal under independent review",
+    "paths": ["src/example.ts"],
+    "content": "proposal content supplied by the operator",
+    "sha256": "e34e8bf622064c269bee50fdc6deacfc2296da832dc8c05352ae7495a456c162",
+    "trust": "UNTRUSTED_PROPOSAL"
+  },
+  "unknowns": []
+}

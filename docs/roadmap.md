@@ -225,8 +225,9 @@ This phase adds a generic agent orchestration layer above the deterministic tool
 * Local Model Adapter v1 with explicit worker-local loopback backends, bounded file inputs/responses, symbolic model ids, and no implicit fallback or cloud path: merged.
 * Worker Observer v1 and local Worker Registry v1 with local resource observation, symbolic model cross-checks, schema v3 heartbeat history, SHA256 integrity, explicit freshness discovery, and no built-in transport: merged.
 * Diagnosis Agent v1 with exact task/repository binding, explicit evidence input, evidence-id-cited hypotheses, read-only verification proposal classes, and no root-cause/execution authority: merged.
-* Reproduction Agent v1 with linked-worktree identity checks, active WRITE lease enforcement, one-new-test-only mutation, skip/bypass guards, and separate hash-bound run evidence: implementation complete on the active capability branch.
-* Review agent and evaluation corpus remain open.
+* Reproduction Agent v1 with linked-worktree identity checks, active WRITE lease enforcement, one-new-test-only mutation, skip/bypass guards, and separate hash-bound run evidence: merged.
+* Independent Review Agent v1 with hash-bound untrusted proposals, separate evidence citations, deterministic descriptive disposition, counterexample/regression-gap output, and no approval/merge authority: implementation complete on the active capability branch.
+* Agent evaluation corpus remains open.
 
 71. Add Agent Task Contract v1 with explicit repository commit, role, risk, scope, required checks, and bounded authority.
 72. Add Agent Worker Contract v1 with explicit heartbeat time, resources, model inventory, capabilities, load, and read/write capacity.

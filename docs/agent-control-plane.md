@@ -179,6 +179,27 @@ bun run agent:reproduce -- verify \
 
 The public `templates/agent-reproduction-policy.v1.json` is generic. Repository paths, worker ids, leases, model mappings, worktree locations, and run evidence remain operator-owned private state.
 
+## Independent Review Agent v1
+
+`bun run agent:review` evaluates an explicitly untrusted proposal against separate caller-supplied evidence. Review v1 is read only: the Agent Task must use role `review`, filesystem `READ_ONLY`, network `NONE`, and must explicitly depend on the proposal source task. Agent Role Policy v1 must pass and no write lease is used.
+
+Review Input v1 separates `evidence` from `proposal`. Evidence consists of bounded independent observations with stable ids. The proposal contains its own id, kind, source task, summary, paths, bounded content and SHA256, and must declare `trust: UNTRUSTED_PROPOSAL`. Proposal claims are never promoted to evidence. Every review finding and regression gap must cite one or more independent evidence ids; proposal paths may only identify which part of the untrusted proposal is being discussed.
+
+The model may report `BLOCKER`, `WARN`, or `INFO` findings and bounded `INSPECT`, `TEST`, or `QUERY` verification steps. The wrapper derives only a descriptive disposition: `BLOCKERS_REPORTED`, `WARNINGS_REPORTED`, or `NO_BLOCKERS_REPORTED`. Even `NO_BLOCKERS_REPORTED` is not approval. Output always keeps execution, source mutation, merge, deployment, and approval authority false. Proposal content and evidence summaries are not copied into normalized output.
+
+```sh
+bun run agent:review -- \
+  --task /private/tasks/review.json \
+  --role-policy /private/policy/agent-roles.json \
+  --input /private/tasks/review-input.json \
+  --model-config /private/config/model-backends.json \
+  --backend worker-local \
+  --model review-local \
+  --json
+```
+
+The public `templates/agent-review-input.v1.json` is synthetic. Real proposal content, evidence, model mappings, repository identity and operator paths remain private deployment inputs.
+
 ## Initial roles
 
 The initial safe roles are `diagnose`, `reproduce`, and `review`. They are intended to establish evidence quality before source-modifying automation is enabled. `repair`, `docs`, `contract`, `dependency`, and `incident` are reserved Agent Task v1 roles for later phases with separate policy and execution boundaries.

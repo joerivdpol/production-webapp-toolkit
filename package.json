@@ -130,7 +130,8 @@
     "agent:worker:observe": "node scripts/agent-worker-observe.js",
     "agent:worker:registry": "node scripts/agent-worker-registry.js",
     "agent:diagnose": "node scripts/agent-diagnosis.js",
-    "agent:reproduce": "node scripts/agent-reproduction.js"
+    "agent:reproduce": "node scripts/agent-reproduction.js",
+    "agent:review": "node scripts/agent-independent-review.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
