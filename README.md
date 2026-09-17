@@ -656,6 +656,26 @@ bun run release:evidence:bundle -- \
 
 Bundle validity is intentionally separate from release approval. A coherent bundle can contain `FAIL` or `WARN` results from vulnerability or runtime-health audits; those statuses remain visible in `results` and are not rewritten. `bundleStatus: VALID` means only that evidence files are structurally valid, hash-bound, identity-consistent, time-consistent, and cross-linked. Deployment policy decisions belong to the later policy-driven deployment gate.
 
+### Optional generic evidence exports
+
+`bun run release:evidence:export` converts a validated Release Evidence Bundle v1 plus an explicit control-to-evidence mapping into either generic JSON or CSV. The public exporter reports evidence coverage only. Every export has `complianceClaim: false` and `attestation: false`; a control with `coverage: PRESENT` means only that the explicitly mapped evidence ids and requested existing result keys are present. It does not mean compliant, certified, attested, effective, or sufficient.
+
+The mapping is intentionally generic and can live outside the public toolkit. Each control names one or more Release Evidence Bundle evidence ids and may request existing scalar result keys such as `artifactProvenance`, `runtimeHealth`, or `vulnerabilities`. The exporter preserves those result values exactly, including `FAIL` and `WARN`. Missing evidence yields `coverage: MISSING` and makes aggregate `evidenceCoverageStatus` `INCOMPLETE`; an `INVALID` source bundle always exports as `INCOMPLETE` even when every mapped evidence id is present.
+
+```sh
+bun run release:evidence:export -- \
+  --bundle ./release-evidence-bundle.json \
+  --mapping /private/path/control-evidence-map.json \
+  --format json
+
+bun run release:evidence:export -- \
+  --bundle ./release-evidence-bundle.json \
+  --mapping /private/path/control-evidence-map.json \
+  --format csv
+```
+
+The exporter contains no built-in SOC, ISO, PCI, HIPAA, or other standards mapping and makes no formal compliance judgment. Organizations may maintain their own private mappings for audit preparation, partner review, or evidence collection without turning the toolkit into a certification or compliance-attestation product.
+
 ### PostgreSQL security policy audit
 
 `bun run security:snapshot` validates PostgreSQL Security Snapshot v1. `bun run security:snapshot:postgres:collect` collects read-only catalog evidence through an explicit libpq service. `bun run audit:postgres-security` evaluates that evidence against an explicit version 1 project policy.

@@ -245,6 +245,121 @@ export function buildReleaseEvidenceBundle(root, options) {
   };
 }
 
+/** @param {unknown} value */
+export function validateReleaseEvidenceBundle(value) {
+  /** @type {Array<{id:string,detail:string}>} */ const errors = [];
+  if (!object(value)) return { valid: false, bundle: null, errors: [{ id: "bundle-invalid", detail: "release evidence bundle must be an object" }] };
+  const allowed = ["version", "source", "createdAt", "baseline", "artifact", "runtime", "trust", "results", "evidenceIndex", "checks", "summary", "technicalStatus", "bundleStatus", "semantics"];
+  for (const key of Object.keys(value)) if (!allowed.includes(key)) errors.push({ id: "bundle-field-unknown", detail: `bundle contains unsupported field "${key}"` });
+  if (value.version !== 1) errors.push({ id: "version-invalid", detail: "version must be exactly 1" });
+
+  let source = null;
+  if (!object(value.source)) errors.push({ id: "source-invalid", detail: "source must be an object" });
+  else {
+    if (Object.keys(value.source).some((key) => key !== "commit")) errors.push({ id: "source-field-unknown", detail: "source contains unsupported fields" });
+    const commit = text(value.source.commit, 128)?.toLowerCase() ?? null;
+    if (!commit || !isFullObjectId(commit)) errors.push({ id: "source-commit-invalid", detail: "source.commit must be a full Git object id" });
+    else source = { commit };
+  }
+  const createdAt = text(value.createdAt, 128);
+  if (!createdAt || !isAbsoluteIsoTimestamp(createdAt)) errors.push({ id: "created-at-invalid", detail: "createdAt must be an absolute ISO timestamp" });
+
+  let baseline = null;
+  if (!object(value.baseline)) errors.push({ id: "baseline-invalid", detail: "baseline must be an object" });
+  else {
+    const allowedBaseline = ["commit", "status", "relationship", "ahead", "behind"];
+    if (Object.keys(value.baseline).some((key) => !allowedBaseline.includes(key))) errors.push({ id: "baseline-field-unknown", detail: "baseline contains unsupported fields" });
+    const commit = text(value.baseline.commit, 128)?.toLowerCase() ?? null;
+    const status = text(value.baseline.status, 32), relationship = text(value.baseline.relationship, 64);
+    /** @param {unknown} input */
+    const distance = (input) => input === null || (Number.isSafeInteger(input) && Number(input) >= 0) ? input : undefined;
+    const ahead = distance(value.baseline.ahead), behind = distance(value.baseline.behind);
+    if (!commit || !isFullObjectId(commit) || !status || !relationship || ahead === undefined || behind === undefined) errors.push({ id: "baseline-fields-invalid", detail: "baseline identity or relationship fields are invalid" });
+    else baseline = { commit, status, relationship, ahead, behind };
+  }
+
+  let artifact = null;
+  if (!object(value.artifact)) errors.push({ id: "artifact-invalid", detail: "artifact must be an object" });
+  else {
+    if (Object.keys(value.artifact).some((key) => !["name", "sha256"].includes(key))) errors.push({ id: "artifact-field-unknown", detail: "artifact contains unsupported fields" });
+    const name = text(value.artifact.name), hash = text(value.artifact.sha256, 64)?.toLowerCase() ?? null;
+    if (!name || !hash || !SHA256.test(hash)) errors.push({ id: "artifact-fields-invalid", detail: "artifact requires name and SHA256" });
+    else artifact = { name, sha256: hash };
+  }
+
+  let runtime = null;
+  if (!object(value.runtime)) errors.push({ id: "runtime-invalid", detail: "runtime must be an object" });
+  else {
+    if (Object.keys(value.runtime).some((key) => !["name", "environment"].includes(key))) errors.push({ id: "runtime-field-unknown", detail: "runtime contains unsupported fields" });
+    const name = text(value.runtime.name), environment = value.runtime.environment === undefined ? null : text(value.runtime.environment);
+    if (!name || (value.runtime.environment !== undefined && !environment)) errors.push({ id: "runtime-fields-invalid", detail: "runtime requires name and non-empty optional environment" });
+    else runtime = { name, ...(environment ? { environment } : {}) };
+  }
+
+  let trust = null;
+  const trustKeys = ["ciAuthenticated", "provenanceAuthenticated", "runtimeAuthenticated", "runtimeHealthAuthenticated", "vulnerabilityAuthenticated"];
+  const rawTrust = value.trust;
+  if (!object(rawTrust) || Object.keys(rawTrust).some((key) => !trustKeys.includes(key)) || trustKeys.some((key) => typeof rawTrust[key] !== "boolean")) errors.push({ id: "trust-invalid", detail: "trust must contain the five explicit authentication booleans" });
+  else trust = Object.fromEntries(trustKeys.map((key) => [key, rawTrust[key]]));
+
+  let results = null;
+  const allowedResultStatus = new Set(["PASS", "WARN", "FAIL"]);
+  if (!object(value.results)) errors.push({ id: "results-invalid", detail: "results must be an object" });
+  else {
+    const resultKeys = ["ciChecks", "artifactProvenance", "runtimeHealth", "vulnerabilities", "vulnerabilityFindings"];
+    if (Object.keys(value.results).some((key) => !resultKeys.includes(key)) || !Array.isArray(value.results.ciChecks)) errors.push({ id: "results-fields-invalid", detail: "results contains unsupported or missing fields" });
+    else {
+      const names = new Set();
+      const ciChecks = [];
+      for (const raw of value.results.ciChecks) {
+        if (!object(raw) || Object.keys(raw).some((key) => !["name", "status"].includes(key))) { errors.push({ id: "ci-result-invalid", detail: "ciChecks entries must contain only name and status" }); continue; }
+        const name = text(raw.name), status = text(raw.status, 16);
+        if (!name || names.has(name) || !status || !new Set(["PASS", "FAIL", "SKIPPED", "MISSING"]).has(status)) { errors.push({ id: "ci-result-fields-invalid", detail: "ciChecks entries must be unique canonical statuses" }); continue; }
+        names.add(name); ciChecks.push({ name, status });
+      }
+      const artifactProvenance = text(value.results.artifactProvenance, 16), runtimeHealth = text(value.results.runtimeHealth, 16), vulnerabilities = text(value.results.vulnerabilities, 16);
+      const vulnerabilityFindings = Number.isSafeInteger(value.results.vulnerabilityFindings) && Number(value.results.vulnerabilityFindings) >= 0 ? Number(value.results.vulnerabilityFindings) : null;
+      if (!artifactProvenance || !new Set(["PASS", "FAIL"]).has(artifactProvenance) || !runtimeHealth || !allowedResultStatus.has(runtimeHealth) || !vulnerabilities || !allowedResultStatus.has(vulnerabilities) || vulnerabilityFindings === null) errors.push({ id: "results-status-invalid", detail: "results statuses or finding count are invalid" });
+      else results = { ciChecks: ciChecks.sort((a, b) => a.name.localeCompare(b.name)), artifactProvenance, runtimeHealth, vulnerabilities, vulnerabilityFindings };
+    }
+  }
+
+  const evidenceIndex = [];
+  if (!Array.isArray(value.evidenceIndex) || value.evidenceIndex.length < RESERVED_INDEX_IDS.size || value.evidenceIndex.length > 512) errors.push({ id: "evidence-index-invalid", detail: "evidenceIndex must contain the canonical evidence set" });
+  else {
+    const ids = new Set();
+    for (const raw of value.evidenceIndex) {
+      if (!object(raw) || Object.keys(raw).some((key) => !["id", "sha256"].includes(key))) { errors.push({ id: "evidence-index-entry-invalid", detail: "evidenceIndex entry must contain id and SHA256 only" }); continue; }
+      const id = portableId(raw.id), hash = text(raw.sha256, 64)?.toLowerCase() ?? null;
+      if (!id || ids.has(id) || !hash || !SHA256.test(hash)) { errors.push({ id: "evidence-index-entry-fields-invalid", detail: "evidenceIndex ids and hashes must be unique and valid" }); continue; }
+      ids.add(id); evidenceIndex.push({ id, sha256: hash });
+    }
+    for (const required of RESERVED_INDEX_IDS) if (!ids.has(required)) errors.push({ id: "evidence-index-required-missing", detail: `evidenceIndex is missing ${required}` });
+  }
+
+  const checks = [];
+  if (!Array.isArray(value.checks) || value.checks.length === 0) errors.push({ id: "checks-invalid", detail: "checks must be a non-empty array" });
+  else {
+    const ids = new Set();
+    for (const raw of value.checks) {
+      if (!object(raw) || Object.keys(raw).some((key) => !["id", "status", "detail"].includes(key))) { errors.push({ id: "check-invalid", detail: "bundle checks must contain id status and detail only" }); continue; }
+      const id = text(raw.id, 512), status = text(raw.status, 16), detail = text(raw.detail, 1024);
+      if (!id || ids.has(id) || !status || !["PASS", "FAIL"].includes(status) || !detail) { errors.push({ id: "check-fields-invalid", detail: "bundle checks must be unique PASS/FAIL findings" }); continue; }
+      ids.add(id); checks.push({ id, status, detail });
+    }
+  }
+
+  const pass = checks.filter((item) => item.status === "PASS").length, fail = checks.filter((item) => item.status === "FAIL").length;
+  if (!object(value.summary) || Object.keys(value.summary).some((key) => !["pass", "fail"].includes(key)) || value.summary.pass !== pass || value.summary.fail !== fail) errors.push({ id: "summary-invalid", detail: "summary must exactly match bundle check counts" });
+  const expectedBundleStatus = fail > 0 ? "INVALID" : "VALID";
+  if (value.technicalStatus !== "PASS" || value.bundleStatus !== expectedBundleStatus) errors.push({ id: "bundle-status-invalid", detail: "technicalStatus or bundleStatus does not match bundle checks" });
+  const semantics = text(value.semantics, 2048);
+  if (!semantics) errors.push({ id: "semantics-invalid", detail: "bundle semantics must be explicit" });
+
+  if (errors.length > 0 || !source || !createdAt || !baseline || !artifact || !runtime || !trust || !results || !semantics) return { valid: false, bundle: null, errors };
+  return { valid: true, bundle: { version: 1, source, createdAt, baseline, artifact, runtime, trust, results, evidenceIndex: evidenceIndex.sort((a, b) => a.id.localeCompare(b.id)), checks: checks.sort((a, b) => a.id.localeCompare(b.id)), summary: { pass, fail }, technicalStatus: "PASS", bundleStatus: expectedBundleStatus, semantics }, errors: [] };
+}
+
 /** @param {ReturnType<typeof buildReleaseEvidenceBundle>} bundle */
 export function formatReleaseEvidenceBundle(bundle) {
   const lines = ["Release Evidence Bundle v1", "", `Source commit: ${bundle.source.commit}`, `Created at: ${bundle.createdAt}`, `Baseline: ${bundle.baseline.commit} (${bundle.baseline.relationship})`, `Artifact: ${bundle.artifact.name} ${bundle.artifact.sha256}`, `Runtime: ${bundle.runtime.name}${bundle.runtime.environment ? ` / ${bundle.runtime.environment}` : ""}`, `Evidence entries: ${bundle.evidenceIndex.length}`, `CI checks: ${bundle.results.ciChecks.length}`, `Artifact provenance: ${bundle.results.artifactProvenance}`, `Runtime health: ${bundle.results.runtimeHealth}`, `Vulnerabilities: ${bundle.results.vulnerabilities} (${bundle.results.vulnerabilityFindings} findings)`, `Semantics: ${bundle.semantics}`, ""];
