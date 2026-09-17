@@ -814,9 +814,10 @@ The human report includes an ecosystem matrix for high-value framework, runtime,
 
 `bun run vulnerability:evidence` validates provider-neutral Vulnerability Evidence Contract v1 documents and explicit package query manifests. Evidence binds an exact package version to `direct`, `transitive`, or `unknown` dependency relationship and stores only bounded advisory identity, aliases, normalized severity, provider modification time, and known fixed versions. Advisory prose and raw provider payloads are intentionally excluded.
 
-Two collectors currently emit the same canonical evidence contract:
+The following provider adapters work with the same canonical evidence contract:
 
 * `bun run vulnerability:osv:collect` sends exact package/version queries to OSV's fixed batch endpoint. OSV is treated as unauthenticated public evidence.
+* `bun run vulnerability:github-advisory:enrich` takes canonical OSV evidence and enriches only `UNKNOWN` GHSA severities through authenticated read-only GitHub Advisory GET requests. OSV remains the applicability source. The adapter requires the same advisory id and package family, fails closed on provider disagreement, emits no advisory prose or raw payloads, and marks the combined source unauthenticated because one source in the chain is public OSV evidence.
 * `bun run vulnerability:github:collect` uses authenticated read-only `gh api --method GET` requests for open Dependabot alerts. Because Dependabot alerts do not establish the exact installed package version, collection requires the same explicit package/version manifest and fails closed when an open alert cannot be bound unambiguously.
 
 The audit is policy driven. `bun run audit:vulnerabilities` requires explicit blocking severities and dependency relationships, plus an explicit evaluation time. Optional evidence freshness limits and bounded vulnerability exceptions can be configured. Exceptions remain visible as warnings and can expire automatically.
@@ -836,8 +837,9 @@ A known advisory never proves exploitability in the application. Reports therefo
 ```sh
 bun run vulnerability:evidence --manifest-file ./vulnerability-packages.json --json
 bun run vulnerability:osv:collect --manifest-file ./vulnerability-packages.json --json > osv-evidence.json
+bun run vulnerability:github-advisory:enrich --evidence-file ./osv-evidence.json --json > enriched-evidence.json
 bun run vulnerability:github:collect --repository owner/repo --manifest-file ./vulnerability-packages.json --json > github-evidence.json
-bun run audit:vulnerabilities --evidence-file ./osv-evidence.json --policy /private/path/vulnerability-policy.json
+bun run audit:vulnerabilities --evidence-file ./enriched-evidence.json --policy /private/path/vulnerability-policy.json
 ```
 
 The canonical evidence validator and audit core are offline and read only. The OSV collector has one fixed HTTPS POST surface; the GitHub collector is limited to authenticated GET requests. Neither collector changes repositories, alerts, dependencies, or provider state.
