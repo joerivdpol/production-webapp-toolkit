@@ -379,6 +379,55 @@ The stdio entry uses the SDK's dual-era compatibility path so current MCP client
 
 The MCP adapter never authorizes execution, source mutation, package mutation, merge, deployment, payment, booking, migration, or production mutation. The deterministic function called by a tool remains authoritative for its own result semantics.
 
+## Task Worktree Sandbox v1
+
+`bun run agent:sandbox` creates and executes task-scoped linked Git worktrees through a Linux Bubblewrap backend. The sandbox is an execution boundary for already-authorized Agent Tasks; it does not create task, role, lease, merge, deployment, migration, payment, booking, or production authority.
+
+Sandbox Policy v1 is private operator configuration. It binds one repository to backend `BWRAP`, network mode `NONE`, an exact command-id-to-argv allowlist, optional read-only runtime executable binds, and explicit resource limits. Runtime binds are limited to individual regular executable files mounted below `/runtime/<id>`; directories and symlinks are refused.
+
+A sandbox id is derived deterministically from task id, repository id, exact base commit, and normalized sandbox policy. Creation writes metadata next to the linked worktree, never inside it. The metadata binds source repository, sandbox parent, control directory, worktree path, task, commit, filesystem authority, policy hash, and caller-supplied creation time.
+
+Write sandboxes require the exact Agent Task to be registered in `RUNNING` state and an active Agent Worker Lease v1 with mode `WRITE` for the exact task, worker, and repository. Read-only tasks require no write lease and receive a read-only `/workspace` mount. Task Sandbox v1 accepts only task network authority `NONE`.
+
+Commands are not accepted from a model or runtime caller as free-form argv. The caller selects one command id already declared in Sandbox Policy v1. Execution uses Bubblewrap outside and `prlimit` inside the namespace. Bubblewrap unshares all namespaces, drops capabilities, mounts `/usr` read-only, creates private `/proc`, `/dev`, `/tmp`, and `/runtime`, clears the environment, and exposes only the linked worktree plus explicit runtime executable binds. It never uses `--share-net`; the isolated network namespace inherits no host route.
+
+Resource policy bounds wall time, CPU seconds, address space, output file size, open file count, process count, captured output bytes, total workspace bytes, and workspace file count. Wall time and output buffering are enforced by the parent process; CPU/address-space/file/open-file/process limits are applied by `prlimit` to the command after Bubblewrap has created the namespace.
+
+Raw stdout and stderr are not returned in execution evidence. Results retain only byte counts and SHA256 hashes, plus exit status, signal, timeout/output/workspace-limit flags, exact command hash, resource policy, lease summary when applicable, and repository/task identity.
+
+```sh
+bun run agent:sandbox -- create \
+  --task /private/tasks/task.json \
+  --role-policy /private/policy/agent-roles.json \
+  --policy /private/policy/agent-sandbox.json \
+  --repository-root /private/repos/example \
+  --sandbox-parent /private/sandboxes \
+  --created-at 2026-09-17T15:00:00Z \
+  --json
+
+bun run agent:sandbox -- run \
+  --task /private/tasks/task.json \
+  --role-policy /private/policy/agent-roles.json \
+  --policy /private/policy/agent-sandbox.json \
+  --repository-root /private/repos/example \
+  --sandbox-parent /private/sandboxes \
+  --command-id test \
+  --evaluated-at 2026-09-17T15:01:00Z \
+  --json
+
+bun run agent:sandbox -- cleanup \
+  --task /private/tasks/task.json \
+  --policy /private/policy/agent-sandbox.json \
+  --repository-root /private/repos/example \
+  --sandbox-parent /private/sandboxes \
+  --cleaned-at 2026-09-17T15:10:00Z \
+  --json
+```
+
+For write tasks, `create` and `run` additionally require `--db`, `--lease-id`, and `--worker-id`. Cleanup deliberately does not require an active lease: after validating exact immutable sandbox metadata and Git worktree identity it may force-remove a dirty linked worktree, prune Git worktree metadata, and delete only the deterministic control directory. Metadata tampering blocks cleanup rather than widening deletion authority.
+
+Task Worktree Sandbox v1 is Linux-specific and fails closed when `/usr/bin/bwrap`, `/usr/bin/prlimit`, or `/usr/bin/git` is unavailable or unsafe. The public `templates/agent-sandbox-policy.v1.json` is synthetic; host paths, executable mappings, command allowlists, repository locations, worker identity, leases, and credentials remain private deployment configuration.
+
 ## Initial roles
 
 The implemented agent roles now include `diagnose`, `reproduce`, `review`, `repair`, `docs`, `contract`, and `dependency`, each with separate policy and authority boundaries. `incident` remains reserved for a later runtime-intelligence phase.
