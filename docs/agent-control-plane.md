@@ -200,6 +200,25 @@ bun run agent:review -- \
 
 The public `templates/agent-review-input.v1.json` is synthetic. Real proposal content, evidence, model mappings, repository identity and operator paths remain private deployment inputs.
 
+## Agent Evaluation Corpus v1
+
+`bun run agent:evaluate` compares stored agent outputs against a versioned, deterministic corpus. It does not invoke a model and does not calculate a synthetic quality score. Each case defines a role, task id, synthetic defect scenario, declared evidence ids, output scope boundaries, a concrete synthetic input fixture, and explicit measurable expectations.
+
+The checked-in `evaluation/agent-corpus.v1.json` currently contains one baseline case each for `diagnose`, `reproduce`, and `review`. Fixture evidence contains synthetic source/status/summary/path data, changed files, and an optional subject. The fixture is input context; its paths may legitimately mention source files outside a write scope. The case scope is enforced against agent output.
+
+Diagnosis evaluation checks task identity, hypothesis count, required evidence citation, allowed next-step kinds, and explicit denial of execution/mutation/root-cause authority. Reproduction evaluation checks task identity, expected status, test path boundaries, `failureObserved: false`, and explicit denial of execution/merge/deploy/production authority. Review evaluation checks task identity, descriptive disposition, minimum findings/regression gaps, required independent evidence citation, proposal-path scope, and explicit denial of execution/mutation/approval/merge/deploy authority. Missing and unknown cases are failures.
+
+A synthetic reference run is checked in only to prove evaluator behavior; it is not a model benchmark result.
+
+```sh
+bun run agent:evaluate -- \
+  --corpus evaluation/agent-corpus.v1.json \
+  --run evaluation/agent-reference-run.v1.json \
+  --json
+```
+
+Future model runners, including Promptfoo integration, can execute the same fixed public fixtures and feed their normalized outputs into this evaluator. Private repositories may maintain additional private corpora without publishing business rules, code, infrastructure, or production evidence.
+
 ## Initial roles
 
 The initial safe roles are `diagnose`, `reproduce`, and `review`. They are intended to establish evidence quality before source-modifying automation is enabled. `repair`, `docs`, `contract`, `dependency`, and `incident` are reserved Agent Task v1 roles for later phases with separate policy and execution boundaries.

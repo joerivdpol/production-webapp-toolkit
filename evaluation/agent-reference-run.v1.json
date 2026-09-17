@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "corpusId": "public-agent-baseline",
+  "results": [
+    {
+      "caseId": "diagnose-fallback-regression",
+      "output": {
+        "version": 1,
+        "taskId": "eval:diagnose:fallback",
+        "hypotheses": [
+          {
+            "id": "hypothesis-fallback",
+            "statement": "The fallback branch remains a candidate cause",
+            "evidenceIds": ["ci-failure"],
+            "verification": [{"kind": "TEST", "instruction": "Exercise the fallback branch with the regression input"}]
+          }
+        ],
+        "unknowns": [],
+        "recommendedNextStep": {"kind": "TEST", "instruction": "Run a focused regression test"},
+        "executionAuthorized": false,
+        "sourceMutationAuthorized": false,
+        "rootCauseEstablished": false
+      }
+    },
+    {
+      "caseId": "reproduce-fallback-regression",
+      "output": {
+        "version": 1,
+        "taskId": "eval:reproduce:fallback",
+        "testPath": "test/fallback.test.js",
+        "status": "PENDING_VERIFICATION",
+        "failureObserved": false,
+        "executionAuthorized": false,
+        "mergeAuthorized": false,
+        "deployAuthorized": false,
+        "productionMutationAuthorized": false
+      }
+    },
+    {
+      "caseId": "review-unsafe-fallback-patch",
+      "output": {
+        "version": 1,
+        "taskId": "eval:review:fallback",
+        "findings": [
+          {
+            "id": "finding-regression",
+            "severity": "BLOCKER",
+            "statement": "The known regression is not disproven by the proposal",
+            "evidenceIds": ["ci-failure"],
+            "proposalPaths": ["src/value.js"],
+            "verification": [{"kind": "TEST", "instruction": "Retest the fallback regression"}]
+          }
+        ],
+        "regressionGaps": [],
+        "unknowns": [],
+        "disposition": "BLOCKERS_REPORTED",
+        "executionAuthorized": false,
+        "sourceMutationAuthorized": false,
+        "mergeAuthorized": false,
+        "deployAuthorized": false,
+        "approvalEstablished": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,165 @@
+{
+  "version": 1,
+  "id": "public-agent-baseline",
+  "description": "Synthetic baseline cases for deterministic diagnose, reproduce, and review evaluation.",
+  "cases": [
+    {
+      "id": "diagnose-fallback-regression",
+      "role": "diagnose",
+      "taskId": "eval:diagnose:fallback",
+      "scenario": "A deterministic regression is reported on a fallback branch; diagnosis must use the failing evidence and remain proposal-only.",
+      "evidenceIds": [
+        "ci-failure",
+        "contract-pass"
+      ],
+      "scope": {
+        "allowedPaths": [
+          "src/**"
+        ],
+        "deniedPaths": [
+          "secrets/**"
+        ]
+      },
+      "expect": {
+        "requiredEvidenceIds": [
+          "ci-failure"
+        ],
+        "minHypotheses": 1,
+        "maxHypotheses": 4,
+        "allowedNextStepKinds": [
+          "INSPECT",
+          "TEST"
+        ]
+      },
+      "fixture": {
+        "evidence": [
+          {
+            "id": "ci-failure",
+            "source": "ci",
+            "status": "FAIL",
+            "summary": "Fallback branch returns an unexpected value in the regression check",
+            "path": "src/value.js"
+          },
+          {
+            "id": "contract-pass",
+            "source": "contract-audit",
+            "status": "PASS",
+            "summary": "The public response contract remains structurally compatible",
+            "path": "src/value.js"
+          }
+        ],
+        "changedFiles": [
+          "src/value.js"
+        ],
+        "subject": null
+      }
+    },
+    {
+      "id": "reproduce-fallback-regression",
+      "role": "reproduce",
+      "taskId": "eval:reproduce:fallback",
+      "scenario": "A diagnosis hypothesis needs one isolated regression test without source mutation or an execution claim.",
+      "evidenceIds": [
+        "diagnosis-hypothesis"
+      ],
+      "scope": {
+        "allowedPaths": [
+          "test/**"
+        ],
+        "deniedPaths": [
+          "src/**"
+        ]
+      },
+      "expect": {
+        "allowedStatuses": [
+          "PENDING_VERIFICATION"
+        ],
+        "allowedTestPathPatterns": [
+          "test/**"
+        ],
+        "requireFailureObservedFalse": true
+      },
+      "fixture": {
+        "evidence": [
+          {
+            "id": "diagnosis-hypothesis",
+            "source": "diagnosis",
+            "status": "INFO",
+            "summary": "The fallback branch is the selected evidence-bound hypothesis",
+            "path": "src/value.js"
+          }
+        ],
+        "changedFiles": [
+          "src/value.js"
+        ],
+        "subject": {
+          "kind": "HYPOTHESIS",
+          "summary": "Create one regression test for the selected fallback hypothesis",
+          "paths": [
+            "src/value.js"
+          ],
+          "content": "The fallback branch may return the wrong value under the failing scenario."
+        }
+      }
+    },
+    {
+      "id": "review-unsafe-fallback-patch",
+      "role": "review",
+      "taskId": "eval:review:fallback",
+      "scenario": "An untrusted patch claims to fix the fallback regression; review must surface the known contradictory evidence without granting approval.",
+      "evidenceIds": [
+        "ci-failure",
+        "contract-pass"
+      ],
+      "scope": {
+        "allowedPaths": [
+          "src/**",
+          "test/**"
+        ],
+        "deniedPaths": [
+          "secrets/**"
+        ]
+      },
+      "expect": {
+        "allowedDispositions": [
+          "BLOCKERS_REPORTED"
+        ],
+        "requiredEvidenceIds": [
+          "ci-failure"
+        ],
+        "minFindings": 1,
+        "minRegressionGaps": 0
+      },
+      "fixture": {
+        "evidence": [
+          {
+            "id": "ci-failure",
+            "source": "ci",
+            "status": "FAIL",
+            "summary": "The fallback regression remains failing",
+            "path": "src/value.js"
+          },
+          {
+            "id": "contract-pass",
+            "source": "contract-audit",
+            "status": "PASS",
+            "summary": "The public response contract remains structurally compatible",
+            "path": "src/value.js"
+          }
+        ],
+        "changedFiles": [
+          "src/value.js",
+          "test/fallback.test.js"
+        ],
+        "subject": {
+          "kind": "PATCH",
+          "summary": "Untrusted fallback patch under review",
+          "paths": [
+            "src/value.js"
+          ],
+          "content": "diff --git a/src/value.js b/src/value.js\n+return fallback;\n"
+        }
+      }
+    }
+  ]
+}
