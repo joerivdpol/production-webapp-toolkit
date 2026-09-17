@@ -156,8 +156,9 @@ Core principles:
 * Versioned public policy-pack registry and monotone resolver for service, webapp, Python service, database-backed webapp/service, payment service, booking service, worker, and bot profiles: merged.
 * Private Organization Policy v1 inheritance with monotone global, profile, and repository layers above the public policy-pack engine: merged.
 * Repository Check Evidence v1 plus policy-aware cross-repository Ecosystem Dashboard v1 with stable machine-readable summaries: merged.
-* Validated Ecosystem Dashboard v1 snapshot history comparison with descriptive repository/check transitions that preserve prior/current audit truth: implementation complete on the active capability branch.
-* Scheduled reporting/notifications and the remaining multi-project control capabilities remain open.
+* Validated Ecosystem Dashboard v1 snapshot history comparison with descriptive repository/check transitions that preserve prior/current audit truth: merged.
+* Scheduled Reporting Policy v1 and deterministic notification planner with declarative cadence, symbolic sink ids, current-state/history triggers, and no dispatch surface: implementation complete on the active capability branch.
+* Configurable severity policy remains open.
 
 56. Introduce a versioned repository manifest so projects can declare profile, runtime, database, capabilities, and required checks.
 57. Introduce policy packs such as webapp, Python service, database backed webapp, payment service, booking service, worker, and bot.
