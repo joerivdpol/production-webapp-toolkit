@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "taskId": "task:contract-impact-example",
+  "repositories": [
+    {
+      "id": "provider-example",
+      "commit": "0123456789abcdef0123456789abcdef01234567"
+    },
+    {
+      "id": "consumer-example",
+      "commit": "89abcdef0123456789abcdef0123456789abcdef"
+    }
+  ],
+  "crossContractPolicy": {
+    "version": 1,
+    "requirements": [
+      {
+        "contractId": "public-api",
+        "repositories": ["provider-example", "consumer-example"],
+        "expectedVersion": "v2"
+      }
+    ]
+  },
+  "inventories": [
+    {
+      "version": 1,
+      "repository": "provider-example",
+      "contracts": [{"id": "public-api", "version": "v2"}]
+    },
+    {
+      "version": 1,
+      "repository": "consumer-example",
+      "contracts": [{"id": "public-api", "version": "v1"}]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "consumer-edge",
+      "source": "consumer-reference",
+      "status": "INFO",
+      "summary": "The consumer explicitly references the shared public API contract",
+      "repository": "consumer-example",
+      "path": "src/client.ts"
+    }
+  ],
+  "relationships": [
+    {
+      "id": "provider-consumer-edge",
+      "contractId": "public-api",
+      "providerRepository": "provider-example",
+      "consumerRepository": "consumer-example",
+      "providerPaths": ["src/api.ts"],
+      "consumerPaths": ["src/client.ts"],
+      "evidenceIds": ["consumer-edge"]
+    }
+  ],
+  "unknowns": []
+}

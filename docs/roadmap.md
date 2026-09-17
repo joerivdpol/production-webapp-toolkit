@@ -230,7 +230,8 @@ This phase adds a generic agent orchestration layer above the deterministic tool
 * Agent Evaluation Corpus v1 with fixed synthetic diagnose/reproduce/review cases, explicit evidence and scope expectations, deterministic per-criterion PASS/FAIL, and no artificial model score: merged.
 * v2.1 Agent control plane implementation is complete and merged.
 * Repair Agent v1 with proposal-first output, exact context hashes, linked-worktree checks, private path/check policy, and LOW-risk leased worktree apply only when explicitly enabled: merged.
-* Documentation Agent v1 with document-only proposal scope, hard human-review protection for AGENTS/governance/policy/security/.github paths, proposal-first behavior, and LOW-risk leased worktree apply for ordinary docs: implementation complete on the active capability branch.
+* Documentation Agent v1 with document-only proposal scope, hard human-review protection for AGENTS/governance/policy/security/.github paths, proposal-first behavior, and LOW-risk leased worktree apply for ordinary docs: merged.
+* Cross Repository Contract Impact Agent v1 with canonical contract-audit composition, explicit provider-consumer edges, evidence/path binding, deterministic mismatch/drift/missing kinds, and no canonical-version inference: implementation complete on the active capability branch.
 * Remaining v2.2+ phases remain open.
 
 71. Add Agent Task Contract v1 with explicit repository commit, role, risk, scope, required checks, and bounded authority.
