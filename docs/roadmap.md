@@ -150,6 +150,11 @@ Core principles:
 
 ## v1.4 Multi project control
 
+### Current v1.4 progress
+
+* Repository Manifest v1 for explicit repository identity, profile, runtime, database, capabilities, and required/advisory check declarations: implementation complete on the active capability branch.
+* Policy packs and the remaining multi-project control capabilities remain open.
+
 56. Introduce a versioned repository manifest so projects can declare profile, runtime, database, capabilities, and required checks.
 57. Introduce policy packs such as webapp, Python service, database backed webapp, payment service, booking service, worker, and bot.
 58. Support private organization policy inheritance layered above the public generic engine.

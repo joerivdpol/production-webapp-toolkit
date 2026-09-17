@@ -1732,3 +1732,32 @@ The previous artifact is hashed directly from the caller-supplied regular non-sy
 A passing report does not execute rollback, deploy artifacts, modify a database, or prove that a caller-declared schema compatibility assessment is semantically correct. It proves the explicit release identity, artifact availability, documentation binding, migration-history integrity, and conservative rollback-hazard checks represented by the supplied evidence.
 
 The capability is local and read only. It has no network, shell-execution, provider-mutation, runtime-environment, or production-write surface.
+
+### Repository Manifest v1
+
+`bun run manifest:validate` validates a versioned, provider-neutral repository declaration. The manifest is intentionally declarative: it states repository identity, profile, runtime, database, capabilities, and required versus advisory check ids without inferring any of them from source code. Runtime and database must always be explicit and may be `null` when a project intentionally has no such system.
+
+```json
+{
+  "version": 1,
+  "repository": { "id": "example-webapp" },
+  "profile": "webapp",
+  "runtime": { "type": "cloudflare-worker", "provider": "cloudflare" },
+  "database": { "type": "postgres", "provider": "supabase" },
+  "capabilities": ["bookings", "payments"],
+  "checks": {
+    "required": ["deployment-evidence", "e2e", "migration-safety"],
+    "advisory": ["accessibility", "performance"]
+  }
+}
+```
+
+```sh
+bun run manifest:validate -- --file ./toolkit-manifest.json --json
+```
+
+Identifiers are portable bounded tokens rather than a hardcoded list of providers, application capabilities, or private business concepts. Required checks must be non-empty; advisory checks may be empty; the two sets may not overlap. Capabilities may be empty. Lists are normalized deterministically for machine-readable comparison. Unsupported fields fail closed.
+
+Repository Manifest v1 deliberately does not resolve policy packs, infer repository shape, execute checks, or decide whether a declared provider/capability exists. Existing heuristic profile detection remains a legacy convenience until policy-pack evaluation is introduced separately. Private organization policy and application-specific canonical truth do not belong in the public manifest.
+
+The validator is offline and read only. It reads only the explicitly supplied manifest JSON and does not inspect repository contents, runtime environment, Git state, network providers, or production systems.
