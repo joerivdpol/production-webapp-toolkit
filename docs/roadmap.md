@@ -154,8 +154,9 @@ Core principles:
 
 * Repository Manifest v1 for explicit repository identity, profile, runtime, database, capabilities, and required/advisory check declarations: merged.
 * Versioned public policy-pack registry and monotone resolver for service, webapp, Python service, database-backed webapp/service, payment service, booking service, worker, and bot profiles: merged.
-* Private Organization Policy v1 inheritance with monotone global, profile, and repository layers above the public policy-pack engine: implementation complete on the active capability branch.
-* Ecosystem dashboards and the remaining multi-project control capabilities remain open.
+* Private Organization Policy v1 inheritance with monotone global, profile, and repository layers above the public policy-pack engine: merged.
+* Repository Check Evidence v1 plus policy-aware cross-repository Ecosystem Dashboard v1 with stable machine-readable summaries: implementation complete on the active capability branch.
+* Historical comparison and the remaining multi-project control capabilities remain open.
 
 56. Introduce a versioned repository manifest so projects can declare profile, runtime, database, capabilities, and required checks.
 57. Introduce policy packs such as webapp, Python service, database backed webapp, payment service, booking service, worker, and bot.

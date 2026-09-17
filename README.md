@@ -1817,3 +1817,34 @@ bun run policy:organization -- \
 Unknown public profiles remain failures and cannot be rescued by private organization policy. Organization inheritance therefore extends a valid public engineering baseline instead of replacing it. The resolver only produces deterministic effective policy; it does not execute checks or contact external systems.
 
 The engine is offline and read only. It reads only the two explicit JSON inputs plus the built-in public pack registry. It does not inspect environment values, Git remotes, external providers, production data, or business configuration.
+
+### Policy-aware ecosystem dashboard
+
+`bun run check:evidence` validates Repository Check Evidence v1. Evidence binds a portable repository id to an explicit source/authentication/collection-time envelope and a unique set of observed `PASS`, `WARN`, `FAIL`, or `UNVERIFIED` check states. It deliberately carries no required/advisory severity, policy ownership, or provider payload.
+
+`bun run ecosystem:dashboard` combines explicit repository manifests, check evidence, and optional private organization policies into Ecosystem Dashboard v1. Severity is always resolved from the canonical public policy-pack and organization-policy engines. Required check `FAIL` blocks a repository; required `WARN`, `UNVERIFIED`, or missing evidence yields `WARN`; advisory non-pass remains visible as `WARN` but never blocks. Observed checks outside effective policy remain visible as unscoped evidence and do not silently become requirements.
+
+```json
+{
+  "version": 1,
+  "generatedAt": "2026-09-17T07:10:00Z",
+  "repositories": [
+    {
+      "manifestFile": "projects/example/manifest.json",
+      "evidenceFile": "projects/example/check-evidence.json",
+      "organizationPolicyFile": "private/organization-policy.json"
+    }
+  ]
+}
+```
+
+```sh
+bun run check:evidence -- --file ./check-evidence.json --json
+bun run ecosystem:dashboard -- --config ./ecosystem-dashboard.json --json
+```
+
+Config-relative inputs are resolved from the dashboard config location; explicit absolute paths are also accepted for private operator-controlled inputs. Every JSON input is bounded and must be a regular non-symlink file. Repository identity in check evidence must exactly match the manifest. Duplicate repository identities fail both rows rather than being double-counted. A malformed repository input is isolated so later repositories still evaluate.
+
+Dashboard `generatedAt` is explicit. Evidence dated after the snapshot time is reported as a readiness warning without rewriting the observed check states. Authentication remains trust metadata only. Private input file paths and provider payloads are not emitted in the dashboard.
+
+The dashboard is offline and read only. It does not execute checks, infer required/advisory severity from evidence, inspect environment values, contact providers, or mutate repositories and production systems.
