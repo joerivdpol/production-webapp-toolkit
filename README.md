@@ -645,6 +645,12 @@ bun run agent:workflow:plan -- \
 
 This separation prevents an agent planner from silently crossing canonical business truth, migrations, secrets, deployment, or other private production boundaries. The public toolkit contains the classification engine only; organization-specific protected paths stay in private policy files.
 
+### Agent Research Bundle v1
+
+`bun run agent:research-bundle` builds and verifies a bounded investigation package for one exact Agent Task and repository commit. It records explicit tool versions, hash-bound caller-sanitized JSON evidence, declarative non-executed commands, and optional canonical Reproduction Run Evidence v1 metadata. The bundle copies no repository tree and persists no source evidence paths.
+
+Research bundles are integrity and reproducibility aids, not secret scanners or execution plans. Structural hygiene rejects several strong credential patterns, but callers remain responsible for sanitization. Stored commands are never executed by the bundle builder or verifier. See `docs/agent-research-bundle.md` for the complete trust boundary.
+
 ### Release Evidence Bundle v1
 
 `bun run release:evidence:bundle` creates a compact machine-readable evidence index for one exact release source commit. It validates canonical CI Evidence, Artifact Provenance, Runtime Evidence, Runtime Health Evidence plus policy, Vulnerability Evidence plus policy, and the toolkit's CycloneDX 1.7 dependency snapshot. The bundle hashes the exact input bytes instead of copying underlying evidence payloads. Optional private JSON policy files can be added as caller-supplied `id=path` entries and are likewise represented only by id and SHA256.
