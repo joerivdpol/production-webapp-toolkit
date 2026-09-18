@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "bundleId": "research:example",
+  "createdAt": "2026-01-01T12:00:00Z",
+  "tools": [
+    {
+      "id": "node",
+      "version": "24.21.0"
+    },
+    {
+      "id": "bun",
+      "version": "1.3.14"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "diagnosis-result",
+      "kind": "diagnosis-result",
+      "file": "/private/sanitized/example-evidence.json",
+      "sanitization": "CALLER_SANITIZED"
+    }
+  ],
+  "commands": [
+    {
+      "id": "inspect-node",
+      "toolId": "node",
+      "cwd": ".",
+      "args": ["--version"],
+      "purpose": "INSPECT"
+    },
+    {
+      "id": "run-tests",
+      "toolId": "bun",
+      "cwd": ".",
+      "args": ["test"],
+      "purpose": "TEST"
+    }
+  ],
+  "reproduction": {
+    "commandId": null,
+    "runEvidence": null
+  }
+}
