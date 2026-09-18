@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "evidence": {
+    "source": "example-agent-runner",
+    "authenticated": false,
+    "collectedAt": "2026-09-18T08:10:00Z"
+  },
+  "runs": [
+    {
+      "runId": "run:example-diagnose",
+      "taskId": "task:example-diagnose",
+      "role": "diagnose",
+      "repository": {
+        "id": "example-webapp",
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "worker": {
+        "id": "worker:persistent",
+        "class": "PERSISTENT"
+      },
+      "model": {
+        "id": "small-local",
+        "class": "SMALL",
+        "backend": "local-runtime"
+      },
+      "startedAt": "2026-09-18T08:00:00Z",
+      "completedAt": "2026-09-18T08:00:02Z",
+      "latencyMs": 2000,
+      "resources": {
+        "cpuTimeMs": 1500,
+        "gpuTimeMs": null
+      },
+      "usage": {
+        "inputTokens": 120,
+        "outputTokens": 40
+      },
+      "proposal": {
+        "outcome": "ACCEPTED"
+      },
+      "review": {
+        "effortSeconds": 90
+      },
+      "defect": {
+        "reopened": false
+      },
+      "evaluation": {
+        "corpusId": "agent-corpus-v1",
+        "status": "PASS"
+      }
+    }
+  ]
+}
