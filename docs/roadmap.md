@@ -237,7 +237,8 @@ This phase adds a generic agent orchestration layer above the deterministic tool
 * Task Worktree Sandbox v1 with Bubblewrap filesystem/network containment, exact policy-command allowlists, prlimit resource bounds, write-lease enforcement, hashed output evidence, and metadata-bound deterministic cleanup: merged.
 * Signed Evidence Verification v1 with Ed25519 exact-byte authentication, signer/key/domain/kind policy binding, explicit freshness, and cryptographic Release Evidence Bundle trust integration: merged.
 * Agent Research Bundle v1 with exact task/commit binding, explicit tool versions, caller-sanitized structurally checked JSON evidence, declarative non-executed commands, canonical reproduction metadata, SHA256 file bindings, and deterministic verification: merged.
-* Repository Impact Graph v1 with exact repository commit declarations, API/contract/canonical-module/test/route/consumer nodes, source-and-commit-bound explicit edges, and deterministic dependency/blast-radius queries: implementation complete on the active capability branch.
+* Repository Impact Graph v1 with exact repository commit declarations, API/contract/canonical-module/test/route/consumer nodes, source-and-commit-bound explicit edges, and deterministic dependency/blast-radius queries: merged.
+* Operator Task Dashboard v1 with read-only Task Registry/Worker Lease projection, derived leased/review-required states, expired-lease visibility, consistency findings, and no second persisted truth model: implementation complete on the active capability branch.
 * Remaining v2.2+ phases remain open.
 
 71. Add Agent Task Contract v1 with explicit repository commit, role, risk, scope, required checks, and bounded authority.
