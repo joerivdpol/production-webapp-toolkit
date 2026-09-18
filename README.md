@@ -651,6 +651,10 @@ This separation prevents an agent planner from silently crossing canonical busin
 
 Research bundles are integrity and reproducibility aids, not secret scanners or execution plans. Structural hygiene rejects several strong credential patterns, but callers remain responsible for sanitization. Stored commands are never executed by the bundle builder or verifier. See `docs/agent-research-bundle.md` for the complete trust boundary.
 
+### Repository Impact Graph v1
+
+`bun run impact:graph` validates and queries an explicit cross-repository graph of APIs, contracts, canonical modules, tests, routes, and consumers. Each repository is pinned to a full commit and every edge carries source repository, exact commit, relative path, and evidence id. `DEPENDENTS` reports the explicit blast radius and `DEPENDENCIES` follows explicit dependencies; traversal is bounded and cycle-safe. The graph never infers missing relationships or canonical business truth. See `docs/repository-impact-graph.md` and `templates/repository-impact-graph.v1.json`.
+
 ### Release Evidence Bundle v1
 
 `bun run release:evidence:bundle` creates a compact machine-readable evidence index for one exact release source commit. It validates canonical CI Evidence, Artifact Provenance, Runtime Evidence, Runtime Health Evidence plus policy, Vulnerability Evidence plus policy, and the toolkit's CycloneDX 1.7 dependency snapshot. The bundle hashes the exact input bytes instead of copying underlying evidence payloads. Optional private JSON policy files can be added as caller-supplied `id=path` entries and are likewise represented only by id and SHA256.
