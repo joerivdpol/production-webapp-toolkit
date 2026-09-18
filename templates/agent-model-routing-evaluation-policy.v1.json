@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "evaluatedAt": "2026-09-18T09:05:00Z",
+  "maxEvidenceAgeSeconds": 3600,
+  "roles": [
+    {
+      "id": "diagnose",
+      "modelClassOrder": ["SMALL", "STANDARD", "STRONG"],
+      "minEvaluatedRuns": 5,
+      "maxEvaluationFailures": 0,
+      "maxReopenedDefects": 0
+    }
+  ]
+}
