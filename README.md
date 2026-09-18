@@ -649,6 +649,8 @@ This separation prevents an agent planner from silently crossing canonical busin
 
 `bun run otel:evidence` adapts caller supplied OTLP JSON traces, metrics, and logs into bounded offline evidence bound to Runtime Evidence v1. It persists service identity, correlation ids, timing, status, metric summaries and counts, while omitting raw log bodies, arbitrary attributes, span events/links, exemplars, endpoints and credentials. See `docs/opentelemetry-evidence.md`.
 
+`bun run incident:correlate` deterministically correlates a validated Incident Input v1 with release timing, exact-commit dependency proposals, explicit cross-repository contract failures, and caller-supplied prior failure SHA256 signatures. Every correlation carries source references and remains a hypothesis only; it never establishes root cause, incident resolution, rollback, deployment, or source mutation authority. See `docs/incident-correlation.md`.
+
 ### Incident Analysis Agent v1
 
 `bun run agent:incident` analyzes one explicitly supplied incident package over exact release identity, Runtime Evidence v1, Runtime Health Evidence v1, bounded sanitized errors, and numeric metrics. It produces evidence-cited hypotheses and `INSPECT` / `TEST` / `QUERY` proposals only. It never authorizes restart, rollback, deployment, provider mutation, or source mutation. See `docs/agent-incident-analysis.md`.

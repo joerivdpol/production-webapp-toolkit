@@ -241,7 +241,8 @@ This phase adds a generic agent orchestration layer above the deterministic tool
 * Operator Task Dashboard v1 with read-only Task Registry/Worker Lease projection, derived leased/review-required states, expired-lease visibility, consistency findings, and no second persisted truth model: merged.
 * v2.2 Safe coding automation is complete and merged.
 * Incident Analysis Agent v1 with exact release/runtime binding, sanitized bounded errors and metrics, evidence-cited hypotheses, read-only verification proposals, and no operational recovery authority: merged.
-* OpenTelemetry Evidence v1 with offline bounded OTLP JSON traces/metrics/logs, Runtime Evidence identity binding, explicit signal limits, and privacy-preserving projection that drops raw bodies and arbitrary attributes: implementation complete on the active capability branch.
+* OpenTelemetry Evidence v1 with offline bounded OTLP JSON traces/metrics/logs, Runtime Evidence identity binding, explicit signal limits, and privacy-preserving projection that drops raw bodies and arbitrary attributes: merged.
+* Incident Correlation Evidence v1 with deterministic release-window, exact dependency-commit, explicit contract-edge, and prior-failure signature correlations with source references and no causality claim: implementation complete on the active capability branch.
 * Remaining v2.3+ phases remain open.
 
 71. Add Agent Task Contract v1 with explicit repository commit, role, risk, scope, required checks, and bounded authority.

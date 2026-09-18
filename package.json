@@ -145,7 +145,8 @@
     "impact:graph": "node scripts/repository-impact-graph.js",
     "agent:dashboard": "node scripts/agent-task-dashboard.js",
     "agent:incident": "node scripts/agent-incident-analysis.js",
-    "otel:evidence": "node scripts/opentelemetry-evidence.js"
+    "otel:evidence": "node scripts/opentelemetry-evidence.js",
+    "incident:correlate": "node scripts/incident-correlation.js"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.0.0",
