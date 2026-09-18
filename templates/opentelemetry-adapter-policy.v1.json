@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "limits": {
+    "maxSpans": 5000,
+    "maxMetrics": 1000,
+    "maxDataPoints": 20000,
+    "maxLogs": 5000
+  }
+}
