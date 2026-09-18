@@ -142,7 +142,8 @@
     "agent:sandbox": "node scripts/agent-task-sandbox.js",
     "evidence:signed:verify": "node scripts/signed-evidence-verification.js",
     "agent:research-bundle": "node scripts/agent-research-bundle.js",
-    "impact:graph": "node scripts/repository-impact-graph.js"
+    "impact:graph": "node scripts/repository-impact-graph.js",
+    "agent:dashboard": "node scripts/agent-task-dashboard.js"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.0.0",
