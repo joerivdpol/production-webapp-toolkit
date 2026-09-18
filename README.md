@@ -655,6 +655,8 @@ This separation prevents an agent planner from silently crossing canonical busin
 
 `bun run agent:route:evaluate` evaluates exact model identities against measured corpus outcomes and reopened-defect evidence. It recommends the smallest configured model class only when sufficiently measured, and recommends a stronger class only after earlier classes are explicitly disqualified; missing evidence stays `UNVERIFIED`. It never mutates Agent Route policy. See `docs/agent-model-routing-evaluation.md`.
 
+`bun run playwright:agents` inspects or audits Playwright planner/generator artifacts in an exact linked worktree. It never authorizes the healer, rejects coverage-heal workflows, requires explicit plan/seed bindings and assertions, and blocks skip/fixme/only/fail constructs in generated tests. See `docs/playwright-agent-integration.md`.
+
 ### Incident Analysis Agent v1
 
 `bun run agent:incident` analyzes one explicitly supplied incident package over exact release identity, Runtime Evidence v1, Runtime Health Evidence v1, bounded sanitized errors, and numeric metrics. It produces evidence-cited hypotheses and `INSPECT` / `TEST` / `QUERY` proposals only. It never authorizes restart, rollback, deployment, provider mutation, or source mutation. See `docs/agent-incident-analysis.md`.
