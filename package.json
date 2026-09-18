@@ -151,7 +151,9 @@
     "agent:route:evaluate": "node scripts/agent-model-routing-evaluation.js",
     "playwright:agents": "node scripts/playwright-agent-integration.js",
     "test:property": "node --test test/property-based-testing.test.js",
-    "mutation:stryker": "node scripts/stryker-mutation-integration.js"
+    "mutation:stryker": "node scripts/stryker-mutation-integration.js",
+    "integration:testcontainers": "node scripts/testcontainers-integration.js",
+    "integration:testcontainers:smoke": "node integration/testcontainers-smoke.mjs"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.0.0",
@@ -161,6 +163,7 @@
     "axe-core": "4.13.0",
     "eslint": "9.39.4",
     "fast-check": "4.10.1",
+    "testcontainers": "12.1.0",
     "typescript": "5.9.3"
   },
   "dependencies": {
