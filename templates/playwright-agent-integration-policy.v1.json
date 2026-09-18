@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "repository": "example-webapp",
+  "expectedPlaywrightVersion": "1.61.1",
+  "loop": "codex",
+  "configFile": "playwright.config.ts",
+  "seedFile": "tests/seed.spec.ts",
+  "planFile": "specs/coverage.plan.md",
+  "generatedTestRoot": "tests/generated",
+  "plannerDefinition": ".codex/agents/playwright_test_planner.toml",
+  "generatorDefinition": ".codex/agents/playwright_test_generator.toml",
+  "plannerPrompt": ".codex/prompts/playwright-test-plan.md",
+  "generatorPrompt": ".codex/prompts/playwright-test-generate.md",
+  "maxPlanBytes": 262144,
+  "maxTestBytes": 262144,
+  "maxGeneratedFiles": 128
+}
