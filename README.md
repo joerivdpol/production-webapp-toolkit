@@ -645,6 +645,10 @@ bun run agent:workflow:plan -- \
 
 This separation prevents an agent planner from silently crossing canonical business truth, migrations, secrets, deployment, or other private production boundaries. The public toolkit contains the classification engine only; organization-specific protected paths stay in private policy files.
 
+### Incident Analysis Agent v1
+
+`bun run agent:incident` analyzes one explicitly supplied incident package over exact release identity, Runtime Evidence v1, Runtime Health Evidence v1, bounded sanitized errors, and numeric metrics. It produces evidence-cited hypotheses and `INSPECT` / `TEST` / `QUERY` proposals only. It never authorizes restart, rollback, deployment, provider mutation, or source mutation. See `docs/agent-incident-analysis.md`.
+
 ### Agent Research Bundle v1
 
 `bun run agent:research-bundle` builds and verifies a bounded investigation package for one exact Agent Task and repository commit. It records explicit tool versions, hash-bound caller-sanitized JSON evidence, declarative non-executed commands, and optional canonical Reproduction Run Evidence v1 metadata. The bundle copies no repository tree and persists no source evidence paths.
