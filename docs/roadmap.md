@@ -234,7 +234,8 @@ This phase adds a generic agent orchestration layer above the deterministic tool
 * Cross Repository Contract Impact Agent v1 with canonical contract-audit composition, explicit provider-consumer edges, evidence/path binding, deterministic mismatch/drift/missing kinds, and no canonical-version inference: merged.
 * Dependency Maintenance Agent v1 with deterministic exact-version classification, full change/evidence coverage, read-only model analysis, and no package-manager or update execution authority: merged.
 * Bounded MCP Server v1 with official MCP v2 stdio transport, a fixed read-only toolkit operation allowlist, strict Zod inputs, bounded payloads, and no generic shell/filesystem/network passthrough: merged.
-* Task Worktree Sandbox v1 with Bubblewrap filesystem/network containment, exact policy-command allowlists, prlimit resource bounds, write-lease enforcement, hashed output evidence, and metadata-bound deterministic cleanup: implementation complete on the active capability branch.
+* Task Worktree Sandbox v1 with Bubblewrap filesystem/network containment, exact policy-command allowlists, prlimit resource bounds, write-lease enforcement, hashed output evidence, and metadata-bound deterministic cleanup: merged.
+* Signed Evidence Verification v1 with Ed25519 exact-byte authentication, signer/key/domain/kind policy binding, explicit freshness, and cryptographic Release Evidence Bundle trust integration: implementation complete on the active capability branch.
 * Remaining v2.2+ phases remain open.
 
 71. Add Agent Task Contract v1 with explicit repository commit, role, risk, scope, required checks, and bounded authority.

@@ -139,7 +139,8 @@
     "agent:contract-impact": "node scripts/agent-contract-impact.js",
     "agent:dependency-maintenance": "node scripts/agent-dependency-maintenance.js",
     "mcp:serve": "node scripts/bounded-mcp-server.js",
-    "agent:sandbox": "node scripts/agent-task-sandbox.js"
+    "agent:sandbox": "node scripts/agent-task-sandbox.js",
+    "evidence:signed:verify": "node scripts/signed-evidence-verification.js"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.0.0",

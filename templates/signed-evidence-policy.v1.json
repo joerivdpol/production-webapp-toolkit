@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "domain": "example.invalid/toolkit-evidence",
+  "maxSignatureAgeSeconds": 3600,
+  "maxFutureSkewSeconds": 60,
+  "keys": [
+    {
+      "signerId": "example-ci",
+      "keyId": "key:example-1",
+      "algorithm": "Ed25519",
+      "publicKeySpkiBase64": "MCowBQYDK2VwAyEAfIUaWgjcVVt4qgpD1g3mAWwBOJKg8ZJdPy5xwbyNuNg=",
+      "publicKeySha256": "9cab88b62d22ee4c6e9be746dd3f1a3612885be5da4d44582ea93ab9730ed8e5",
+      "validFrom": "2026-01-01T00:00:00Z",
+      "validUntil": "2035-01-01T00:00:00Z",
+      "status": "ACTIVE",
+      "allowedEvidenceKinds": [
+        "ci-evidence",
+        "artifact-provenance",
+        "runtime-evidence",
+        "runtime-health-evidence",
+        "vulnerability-evidence"
+      ]
+    }
+  ]
+}

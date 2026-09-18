@@ -14,6 +14,7 @@ import { validateRuntimeHealthPolicy, inspectRuntimeHealth } from "./audit-runti
 import { validateVulnerabilityEvidence } from "./vulnerability-evidence.js";
 import { validateVulnerabilityPolicy, inspectVulnerabilities } from "./audit-vulnerabilities.js";
 import { inspectProductionBaseline } from "./audit-production-baseline.js";
+import { verifySignedEvidenceBytes } from "./signed-evidence-verification.js";
 
 const SHA256 = /^[a-fA-F0-9]{64}$/;
 const MAX_EVIDENCE_BYTES = 32 * 1024 * 1024;
@@ -46,6 +47,14 @@ const RESERVED_INDEX_IDS = new Set([
   "runtime-evidence",
   "runtime-health-evidence",
   "runtime-health-policy",
+]);
+
+const SIGNED_TRUST_TARGETS = new Map([
+  ["ci-evidence", { fileKey: "ci", trustKey: "ciAuthenticated" }],
+  ["artifact-provenance", { fileKey: "provenance", trustKey: "provenanceAuthenticated" }],
+  ["runtime-evidence", { fileKey: "runtime", trustKey: "runtimeAuthenticated" }],
+  ["runtime-health-evidence", { fileKey: "health", trustKey: "runtimeHealthAuthenticated" }],
+  ["vulnerability-evidence", { fileKey: "vulnerabilities", trustKey: "vulnerabilityAuthenticated" }],
 ]);
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
@@ -188,6 +197,31 @@ export function buildReleaseEvidenceBundle(root, options) {
   const healthAudit = inspectRuntimeHealth(healthResult.evidence, healthPolicyResult.policy);
   const vulnerabilityAudit = inspectVulnerabilities(vulnerabilityResult.evidence, vulnerabilityPolicyResult.policy);
 
+  const trust = { ciAuthenticated: false, provenanceAuthenticated: false, runtimeAuthenticated: false, runtimeHealthAuthenticated: false, vulnerabilityAuthenticated: false };
+  const signedEntries = Array.isArray(options.signedEvidence) ? options.signedEvidence : [];
+  const signedMode = Boolean(options.signedEvidencePolicyFile) || signedEntries.length > 0;
+  let signedPolicyFile = null;
+  /** @type {Array<{id:string,file:{bytes:Buffer,value:any,sha256:string}}>} */ const signedEnvelopeFiles = [];
+  if (signedMode) {
+    if (!options.signedEvidencePolicyFile || signedEntries.length === 0) throw new Error("signed evidence mode requires one policy file and at least one envelope");
+    signedPolicyFile = readEvidenceFile(options.signedEvidencePolicyFile, 1024 * 1024);
+    const seen = new Set();
+    for (const entry of signedEntries) {
+      const id = portableId(entry?.id);
+      if (!id || !SIGNED_TRUST_TARGETS.has(id) || seen.has(id) || typeof entry?.file !== "string") throw new Error("signed evidence entries must use unique supported evidence ids and explicit envelope files");
+      seen.add(id);
+      const envelopeFile = readEvidenceFile(entry.file, 128 * 1024);
+      const target = /** @type {{fileKey:"ci"|"provenance"|"runtime"|"health"|"vulnerabilities",trustKey:"ciAuthenticated"|"provenanceAuthenticated"|"runtimeAuthenticated"|"runtimeHealthAuthenticated"|"vulnerabilityAuthenticated"}|undefined} */ (SIGNED_TRUST_TARGETS.get(id));
+      const evidenceFile = target ? files[target.fileKey] : null;
+      if (!target || !evidenceFile) throw new Error("signed evidence target is unavailable");
+      const report = verifySignedEvidenceBytes(evidenceFile.bytes, signedPolicyFile.value, envelopeFile.value, createdAt);
+      const verified = report.overallStatus === "PASS" && report.authenticated === true && report.subject.evidenceKind === id;
+      trust[target.trustKey] = verified;
+      add(`signed-evidence:${id}`, verified, "signed evidence must cryptographically verify exact bytes, expected kind, signer/key policy, and freshness");
+      signedEnvelopeFiles.push({ id, file: envelopeFile });
+    }
+  }
+
   for (const pkg of vulnerabilityResult.evidence.packages) {
     const ref = pkg.ecosystem.toLowerCase() === "npm" ? `npm:${pkg.name}@${pkg.version}` : null;
     add(`vulnerability-package:${pkg.ecosystem}:${pkg.name}@${pkg.version}`, ref !== null && sbomResult.snapshot.componentRefs.includes(ref), "every vulnerability evidence package must be present in the dependency snapshot at the exact version");
@@ -218,10 +252,14 @@ export function buildReleaseEvidenceBundle(root, options) {
     indexEntry("runtime-health-evidence", files.health),
     indexEntry("runtime-health-policy", files.healthPolicy),
   ];
+  if (signedPolicyFile) {
+    evidenceIndex.push(indexEntry("signed-evidence-policy", signedPolicyFile));
+    for (const entry of signedEnvelopeFiles) evidenceIndex.push(indexEntry(`signed-envelope:${entry.id}`, entry.file));
+  }
   const extraPolicyIds = new Set();
   for (const policyFile of options.policyFiles ?? []) {
     const id = portableId(policyFile.id);
-    if (!id || RESERVED_INDEX_IDS.has(id) || extraPolicyIds.has(id)) throw new Error("release bundle extra policy ids must be unique portable non-reserved identifiers");
+    if (!id || RESERVED_INDEX_IDS.has(id) || id === "signed-evidence-policy" || id.startsWith("signed-envelope:") || extraPolicyIds.has(id)) throw new Error("release bundle extra policy ids must be unique portable non-reserved identifiers");
     extraPolicyIds.add(id);
     const file = readEvidenceFile(policyFile.file, 8 * 1024 * 1024);
     evidenceIndex.push(indexEntry(id, file));
@@ -242,13 +280,7 @@ export function buildReleaseEvidenceBundle(root, options) {
     },
     artifact: { name: provenanceResult.provenance.build.artifact.name, sha256: provenanceResult.provenance.build.artifact.sha256 },
     runtime: { ...runtimeResult.evidence.runtime },
-    trust: {
-      ciAuthenticated: ciResult.evidence.evidence.authenticated,
-      provenanceAuthenticated: provenanceResult.provenance.evidence.authenticated,
-      runtimeAuthenticated: runtimeResult.evidence.evidence.authenticated,
-      runtimeHealthAuthenticated: healthResult.evidence.evidence.authenticated,
-      vulnerabilityAuthenticated: vulnerabilityResult.evidence.source.authenticated,
-    },
+    trust,
     results: {
       ciChecks: ciResult.evidence.checks.map((item) => ({ name: item.name, status: item.status })),
       artifactProvenance: provenanceAudit.overallStatus,
@@ -261,7 +293,7 @@ export function buildReleaseEvidenceBundle(root, options) {
     summary: { pass: checks.length - fail, fail },
     technicalStatus: "PASS",
     bundleStatus: fail > 0 ? "INVALID" : "VALID",
-    semantics: "evidence-index validity and cross-contract coherence only; embedded audit FAIL/WARN results are preserved and do not make the bundle itself invalid",
+    semantics: "evidence-index validity and cross-contract coherence only; embedded audit FAIL/WARN results are preserved; trust authentication is true only when Signed Evidence Verification v1 cryptographically verifies exact bytes; embedded caller authentication booleans are not trusted",
   };
 }
 
@@ -404,8 +436,10 @@ function policyFileArgument(value) {
 function parse(argv) {
   const values = new Map();
   /** @type {Array<{id:string,file:string}>} */ const policyFiles = [];
+  /** @type {Array<{id:string,file:string}>} */ const signedEvidence = [];
   let json = false;
-  const scalarArgs = new Set(["--root", "--source-commit", "--baseline-commit", "--created-at", "--ci-evidence-file", "--sbom-file", "--vulnerability-evidence-file", "--vulnerability-policy-file", "--artifact-provenance-file", "--runtime-evidence-file", "--runtime-health-evidence-file", "--runtime-health-policy-file"]);
+  const requiredScalarArgs = new Set(["--root", "--source-commit", "--baseline-commit", "--created-at", "--ci-evidence-file", "--sbom-file", "--vulnerability-evidence-file", "--vulnerability-policy-file", "--artifact-provenance-file", "--runtime-evidence-file", "--runtime-health-evidence-file", "--runtime-health-policy-file"]);
+  const scalarArgs = new Set([...requiredScalarArgs, "--signed-evidence-policy-file"]);
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--json") { json = true; continue; }
@@ -415,19 +449,23 @@ function parse(argv) {
     if (arg === "--policy-file") {
       const parsed = policyFileArgument(next); if (!parsed) return null; policyFiles.push(parsed); continue;
     }
+    if (arg === "--signed-evidence") {
+      const parsed = policyFileArgument(next); if (!parsed) return null; signedEvidence.push(parsed); continue;
+    }
     if (!scalarArgs.has(arg ?? "") || values.has(arg)) return null;
     values.set(arg, next);
   }
-  for (const arg of scalarArgs) if (!values.has(arg)) return null;
+  for (const arg of requiredScalarArgs) if (!values.has(arg)) return null;
   return {
     root: values.get("--root"), sourceCommit: values.get("--source-commit"), baselineCommit: values.get("--baseline-commit"), createdAt: values.get("--created-at"),
-    ciEvidenceFile: values.get("--ci-evidence-file"), sbomFile: values.get("--sbom-file"), vulnerabilityEvidenceFile: values.get("--vulnerability-evidence-file"), vulnerabilityPolicyFile: values.get("--vulnerability-policy-file"), artifactProvenanceFile: values.get("--artifact-provenance-file"), runtimeEvidenceFile: values.get("--runtime-evidence-file"), runtimeHealthEvidenceFile: values.get("--runtime-health-evidence-file"), runtimeHealthPolicyFile: values.get("--runtime-health-policy-file"), policyFiles, json,
+    ciEvidenceFile: values.get("--ci-evidence-file"), sbomFile: values.get("--sbom-file"), vulnerabilityEvidenceFile: values.get("--vulnerability-evidence-file"), vulnerabilityPolicyFile: values.get("--vulnerability-policy-file"), artifactProvenanceFile: values.get("--artifact-provenance-file"), runtimeEvidenceFile: values.get("--runtime-evidence-file"), runtimeHealthEvidenceFile: values.get("--runtime-health-evidence-file"), runtimeHealthPolicyFile: values.get("--runtime-health-policy-file"),
+    signedEvidencePolicyFile: values.get("--signed-evidence-policy-file") ?? null, signedEvidence, policyFiles, json,
   };
 }
 
 export function main(argv = process.argv.slice(2)) {
   const options = parse(argv);
-  if (!options) { console.error("Usage: node scripts/release-evidence-bundle.js --root <repository> --source-commit <full-sha> --baseline-commit <full-sha> --created-at <ISO> --ci-evidence-file <ci.json> --sbom-file <sbom.json> --vulnerability-evidence-file <vuln.json> --vulnerability-policy-file <policy.json> --artifact-provenance-file <provenance.json> --runtime-evidence-file <runtime.json> --runtime-health-evidence-file <health.json> --runtime-health-policy-file <health-policy.json> [--policy-file <id>=<file> ...] [--json]"); return 1; }
+  if (!options) { console.error("Usage: node scripts/release-evidence-bundle.js --root <repository> --source-commit <full-sha> --baseline-commit <full-sha> --created-at <ISO> --ci-evidence-file <ci.json> --sbom-file <sbom.json> --vulnerability-evidence-file <vuln.json> --vulnerability-policy-file <policy.json> --artifact-provenance-file <provenance.json> --runtime-evidence-file <runtime.json> --runtime-health-evidence-file <health.json> --runtime-health-policy-file <health-policy.json> [--signed-evidence-policy-file <policy.json> --signed-evidence <evidence-id>=<envelope.json> ...] [--policy-file <id>=<file> ...] [--json]"); return 1; }
   try {
     const bundle = buildReleaseEvidenceBundle(options.root, options);
     console.log(options.json ? JSON.stringify(bundle) : formatReleaseEvidenceBundle(bundle));

@@ -12,6 +12,7 @@ import {
   main,
   validateCycloneDxReleaseSnapshot,
 } from "../scripts/release-evidence-bundle.js";
+import { buildSignedEvidenceMessage } from "../scripts/signed-evidence-verification.js";
 
 const CREATED = "2026-09-17T10:00:00Z";
 const ARTIFACT_HASH = "b".repeat(64);
@@ -196,6 +197,29 @@ function hashFile(file) {
   return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 }
 
+/** @returns {{privateKey:crypto.KeyObject,policy:any}} */
+function signedPolicyFixture() {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
+  const der = publicKey.export({ format: "der", type: "spki" });
+  return { privateKey, policy: {
+    version: 1,
+    domain: "example.invalid/release-evidence",
+    maxSignatureAgeSeconds: 3600,
+    maxFutureSkewSeconds: 30,
+    keys: [{
+      signerId: "release-ci",
+      keyId: "key:release-1",
+      algorithm: "Ed25519",
+      publicKeySpkiBase64: der.toString("base64"),
+      publicKeySha256: crypto.createHash("sha256").update(der).digest("hex"),
+      validFrom: "2026-01-01T00:00:00Z",
+      validUntil: "2027-01-01T00:00:00Z",
+      status: "ACTIVE",
+      allowedEvidenceKinds: ["ci-evidence","runtime-evidence","artifact-provenance","runtime-health-evidence","vulnerability-evidence"],
+    }],
+  }};
+}
+
 test("validates a bounded CycloneDX release dependency snapshot", () => {
   const result = validateCycloneDxReleaseSnapshot(sbomRaw("a".repeat(40)));
   assert.equal(result.valid, true, result.error ?? undefined);
@@ -231,9 +255,79 @@ test("coherent release evidence produces a VALID hash-bound bundle", () => {
   assert.equal(bundle.results.runtimeHealth, "PASS");
   assert.equal(bundle.results.vulnerabilities, "PASS");
   assert.equal(bundle.evidenceIndex.length, 8);
+  assert.deepEqual(bundle.trust, {
+    ciAuthenticated: false,
+    provenanceAuthenticated: false,
+    runtimeAuthenticated: false,
+    runtimeHealthAuthenticated: false,
+    vulnerabilityAuthenticated: false,
+  });
+  assert.match(bundle.semantics, /caller authentication booleans are not trusted/);
   const ciIndex = bundle.evidenceIndex.find((item) => item.id === "ci-evidence");
   assert.equal(ciIndex?.sha256, hashFile(options.ciEvidenceFile));
   assert.equal("file" in (ciIndex ?? {}), false);
+  fs.rmSync(repo.root, { recursive: true, force: true });
+});
+
+/** @param {ReturnType<typeof repository>} repo @param {any} options @param {string} evidenceId @param {string} evidenceFile @param {ReturnType<typeof signedPolicyFixture>} signing @param {Partial<any>} [overrides] */
+function attachSignedEvidence(repo, options, evidenceId, evidenceFile, signing, overrides = {}) {
+  const bytes = fs.readFileSync(evidenceFile);
+  const base = {
+    version: 1, domain: signing.policy.domain, evidenceKind: evidenceId,
+    evidenceSha256: crypto.createHash("sha256").update(bytes).digest("hex"),
+    evidenceBytes: bytes.length, signerId: "release-ci", keyId: "key:release-1",
+    signedAt: "2026-09-17T09:58:00Z", ...overrides,
+  };
+  const signature = crypto.sign(null, buildSignedEvidenceMessage(base), signing.privateKey).toString("base64");
+  const policyFile = writeJson(repo.root, "signed-evidence-policy.json", signing.policy);
+  const envelopeFile = writeJson(repo.root, `signed-${evidenceId}.json`, { ...base, signatureBase64: signature });
+  options.signedEvidencePolicyFile = policyFile;
+  options.signedEvidence = [...(options.signedEvidence ?? []), { id: evidenceId, file: envelopeFile }];
+  return { policyFile, envelopeFile };
+}
+
+test("valid signed CI evidence upgrades only matching trust", () => {
+  const repo = repository(), options = bundleOptions(repo), signing = signedPolicyFixture();
+  attachSignedEvidence(repo, options, "ci-evidence", options.ciEvidenceFile, signing);
+  const bundle = buildReleaseEvidenceBundle(repo.root, options);
+  assert.equal(bundle.bundleStatus, "VALID");
+  assert.equal(bundle.trust.ciAuthenticated, true);
+  assert.equal(bundle.trust.provenanceAuthenticated, false);
+  assert.equal(bundle.checks.some((item) => item.id === "signed-evidence:ci-evidence" && item.status === "PASS"), true);
+  assert.equal(bundle.evidenceIndex.some((item) => item.id === "signed-evidence-policy"), true);
+  assert.equal(bundle.evidenceIndex.some((item) => item.id === "signed-envelope:ci-evidence"), true);
+  fs.rmSync(repo.root, { recursive: true, force: true });
+});
+
+test("wrong signing key makes signed bundle invalid", () => {
+  const repo = repository(), options = bundleOptions(repo), trusted = signedPolicyFixture(), other = signedPolicyFixture();
+  const proof = attachSignedEvidence(repo, options, "ci-evidence", options.ciEvidenceFile, trusted);
+  const raw = JSON.parse(fs.readFileSync(proof.envelopeFile, "utf8"));
+  raw.signatureBase64 = crypto.sign(null, buildSignedEvidenceMessage(raw), other.privateKey).toString("base64");
+  fs.writeFileSync(proof.envelopeFile, JSON.stringify(raw));
+  const bundle = buildReleaseEvidenceBundle(repo.root, options);
+  assert.equal(bundle.bundleStatus, "INVALID");
+  assert.equal(bundle.trust.ciAuthenticated, false);
+  fs.rmSync(repo.root, { recursive: true, force: true });
+});
+
+test("signed envelope kind cannot be relabeled by bundle mapping", () => {
+  const repo = repository(), options = bundleOptions(repo), signing = signedPolicyFixture();
+  attachSignedEvidence(repo, options, "ci-evidence", options.ciEvidenceFile, signing, { evidenceKind: "runtime-evidence" });
+  const bundle = buildReleaseEvidenceBundle(repo.root, options);
+  assert.equal(bundle.bundleStatus, "INVALID");
+  assert.equal(bundle.trust.ciAuthenticated, false);
+  fs.rmSync(repo.root, { recursive: true, force: true });
+});
+
+test("signed mode requires policy and unique supported ids", () => {
+  const repo = repository(), options = bundleOptions(repo), signing = signedPolicyFixture();
+  options.signedEvidence = [{ id: "ci-evidence", file: writeJson(repo.root, "empty-envelope.json", {}) }];
+  assert.throws(() => buildReleaseEvidenceBundle(repo.root, options), /requires one policy file/);
+  const options2 = bundleOptions(repo);
+  attachSignedEvidence(repo, options2, "ci-evidence", options2.ciEvidenceFile, signing);
+  options2.signedEvidence.push({ ...options2.signedEvidence[0] });
+  assert.throws(() => buildReleaseEvidenceBundle(repo.root, options2), /unique supported evidence ids/);
   fs.rmSync(repo.root, { recursive: true, force: true });
 });
 
@@ -421,6 +515,23 @@ test("CLI emits a stable VALID bundle for coherent evidence", () => {
   const parsed = JSON.parse(stdout);
   assert.equal(parsed.bundleStatus, "VALID");
   assert.equal(parsed.source.commit, repo.source);
+  fs.rmSync(repo.root, { recursive: true, force: true });
+});
+
+test("CLI accepts cryptographically verified signed evidence mode", () => {
+  const repo = repository(), options = bundleOptions(repo), signing = signedPolicyFixture();
+  const proof = attachSignedEvidence(repo, options, "ci-evidence", options.ciEvidenceFile, signing);
+  const args = [
+    "--root", repo.root, "--source-commit", repo.source, "--baseline-commit", repo.baseline, "--created-at", CREATED,
+    "--ci-evidence-file", options.ciEvidenceFile, "--sbom-file", options.sbomFile,
+    "--vulnerability-evidence-file", options.vulnerabilityEvidenceFile, "--vulnerability-policy-file", options.vulnerabilityPolicyFile,
+    "--artifact-provenance-file", options.artifactProvenanceFile, "--runtime-evidence-file", options.runtimeEvidenceFile,
+    "--runtime-health-evidence-file", options.runtimeHealthEvidenceFile, "--runtime-health-policy-file", options.runtimeHealthPolicyFile,
+    "--signed-evidence-policy-file", proof.policyFile, "--signed-evidence", `ci-evidence=${proof.envelopeFile}`, "--json",
+  ];
+  const original = console.log; let stdout = ""; console.log = (...values) => { stdout += `${values.join(" ")}\n`; };
+  try { assert.equal(main(args), 0); } finally { console.log = original; }
+  const bundle = JSON.parse(stdout.trim()); assert.equal(bundle.trust.ciAuthenticated, true); assert.equal(bundle.bundleStatus, "VALID");
   fs.rmSync(repo.root, { recursive: true, force: true });
 });
 
