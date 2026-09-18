@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "incident": {
+    "version": 1,
+    "taskId": "task:incident:example",
+    "repository": {
+      "id": "example-webapp",
+      "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "evaluatedAt": "2026-09-18T06:15:00Z",
+    "release": {
+      "id": "release:example",
+      "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "deployedAt": "2026-09-18T06:05:00Z",
+      "artifactSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "runtimeEvidence": {
+      "version": 1,
+      "runtime": { "name": "web", "environment": "production" },
+      "deployment": { "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+      "evidence": { "source": "runtime-collector", "authenticated": false, "collectedAt": "2026-09-18T06:10:00Z" }
+    },
+    "runtimeHealthEvidence": {
+      "version": 1,
+      "runtime": { "name": "web", "environment": "production" },
+      "evidence": { "source": "health-collector", "authenticated": false, "collectedAt": "2026-09-18T06:10:00Z" },
+      "checks": [
+        { "id": "database", "category": "database", "status": "DEGRADED", "latencyMs": 420 }
+      ]
+    },
+    "errors": [
+      {
+        "id": "database-timeout",
+        "source": "runtime-errors",
+        "observedAt": "2026-09-18T06:10:00Z",
+        "count": 12,
+        "summary": "Database requests exceeded the configured timeout",
+        "path": "src/database.js"
+      }
+    ],
+    "metrics": [
+      {
+        "id": "db-latency",
+        "source": "runtime-metrics",
+        "observedAt": "2026-09-18T06:10:00Z",
+        "name": "database_latency_ms",
+        "value": 420,
+        "unit": "ms",
+        "status": "WARN"
+      }
+    ],
+    "unknowns": []
+  },
+  "dependencyInputs": [],
+  "contractInputs": [],
+  "incidentSignatures": [
+    {
+      "errorId": "database-timeout",
+      "signatureSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  ],
+  "knownFailures": [
+    {
+      "id": "known-db-timeout",
+      "sourceRef": "failure-catalog:42",
+      "repository": { "id": "example-webapp" },
+      "lastObservedAt": "2026-09-10T06:10:00Z",
+      "signatureSha256": [
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      ],
+      "evidenceRefs": [
+        "prior:error:42",
+        "prior:run:42"
+      ]
+    }
+  ],
+  "policy": {
+    "version": 1,
+    "maxReleaseWindowSeconds": 3600,
+    "maxKnownFailureAgeSeconds": 2592000
+  }
+}
