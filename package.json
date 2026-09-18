@@ -150,11 +150,13 @@
     "agent:telemetry": "node scripts/agent-resource-telemetry.js",
     "agent:route:evaluate": "node scripts/agent-model-routing-evaluation.js",
     "playwright:agents": "node scripts/playwright-agent-integration.js",
-    "test:property": "node --test test/property-based-testing.test.js"
+    "test:property": "node --test test/property-based-testing.test.js",
+    "mutation:stryker": "node scripts/stryker-mutation-integration.js"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.0.0",
     "@playwright/test": "1.61.1",
+    "@stryker-mutator/core": "10.0.0",
     "@types/node": "22.19.17",
     "axe-core": "4.13.0",
     "eslint": "9.39.4",

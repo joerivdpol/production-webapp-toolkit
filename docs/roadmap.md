@@ -246,8 +246,9 @@ This phase adds a generic agent orchestration layer above the deterministic tool
 * Agent Resource & Model Quality Telemetry v1 with exact run timing, symbolic worker/model identity, CPU/GPU time, token usage, proposal outcomes, review effort, reopened defects, optional corpus status, and deterministic grouping without an artificial quality score: merged.
 * Model Routing Evaluation v1 with exact-model evidence qualification, conservative small-first recommendation, explicit measured-quality escalation, freshness handling, and no automatic route-policy mutation: merged.
 * Playwright Planner/Generator Integration v1 with exact worktree/version binding, planner-generator-only authorization, bounded plan validation, AST test auditing, and hard rejection of skip/fixme/only/fail constructs: merged.
-* fast-check Property Based Testing v1 with deterministic seed/replay policy, explicit validator/policy/state/numeric/custom adapters, no JSON code loading, and no inferred business properties: implementation complete on the active capability branch.
-* Remaining v2.3+ phases remain open.
+* fast-check Property Based Testing v1 with deterministic seed/replay policy, explicit validator/policy/state/numeric/custom adapters, no JSON code loading, and no inferred business properties: merged.
+* StrykerJS Mutation Testing v1 with pinned Stryker 10.0.0, exact source-file mutation scope, bounded test-only command policy, deterministic mutation-score evidence, privacy-preserving report adaptation, and real integration smoke coverage: implementation complete on the active capability branch.
+* Remaining v2.4+ phases remain open.
 
 71. Add Agent Task Contract v1 with explicit repository commit, role, risk, scope, required checks, and bounded authority.
 72. Add Agent Worker Contract v1 with explicit heartbeat time, resources, model inventory, capabilities, load, and read/write capacity.
