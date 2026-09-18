@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "repositories": [
+    {
+      "id": "example-api",
+      "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "id": "example-web",
+      "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "contract:booking",
+      "kind": "CONTRACT",
+      "repository": "example-api",
+      "locator": "booking-v1",
+      "sourcePath": "contracts/booking.json"
+    },
+    {
+      "id": "api:booking",
+      "kind": "API",
+      "repository": "example-api",
+      "locator": "POST /bookings",
+      "sourcePath": "openapi.json"
+    },
+    {
+      "id": "consumer:checkout",
+      "kind": "CONSUMER",
+      "repository": "example-web",
+      "locator": "checkout-client",
+      "sourcePath": "src/checkout.js"
+    },
+    {
+      "id": "route:checkout",
+      "kind": "ROUTE",
+      "repository": "example-web",
+      "locator": "/checkout",
+      "sourcePath": "src/routes/checkout.js"
+    },
+    {
+      "id": "test:checkout",
+      "kind": "TEST",
+      "repository": "example-web",
+      "locator": "checkout regression",
+      "sourcePath": "test/checkout.test.js"
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge:api-contract",
+      "kind": "IMPLEMENTS",
+      "from": "api:booking",
+      "to": "contract:booking",
+      "provenance": {
+        "repository": "example-api",
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "path": "openapi.json",
+        "evidenceId": "openapi-operation"
+      }
+    },
+    {
+      "id": "edge:consumer-api",
+      "kind": "CONSUMES",
+      "from": "consumer:checkout",
+      "to": "api:booking",
+      "provenance": {
+        "repository": "example-web",
+        "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "path": "src/checkout.js",
+        "evidenceId": "client-call"
+      }
+    },
+    {
+      "id": "edge:route-consumer",
+      "kind": "ROUTES_TO",
+      "from": "route:checkout",
+      "to": "consumer:checkout",
+      "provenance": {
+        "repository": "example-web",
+        "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "path": "src/routes/checkout.js",
+        "evidenceId": "route-call"
+      }
+    },
+    {
+      "id": "edge:test-route",
+      "kind": "TESTS",
+      "from": "test:checkout",
+      "to": "route:checkout",
+      "provenance": {
+        "repository": "example-web",
+        "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "path": "test/checkout.test.js",
+        "evidenceId": "test-coverage"
+      }
+    }
+  ]
+}
