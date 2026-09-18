@@ -245,7 +245,8 @@ This phase adds a generic agent orchestration layer above the deterministic tool
 * Incident Correlation Evidence v1 with deterministic release-window, exact dependency-commit, explicit contract-edge, and prior-failure signature correlations with source references and no causality claim: merged.
 * Agent Resource & Model Quality Telemetry v1 with exact run timing, symbolic worker/model identity, CPU/GPU time, token usage, proposal outcomes, review effort, reopened defects, optional corpus status, and deterministic grouping without an artificial quality score: merged.
 * Model Routing Evaluation v1 with exact-model evidence qualification, conservative small-first recommendation, explicit measured-quality escalation, freshness handling, and no automatic route-policy mutation: merged.
-* Playwright Planner/Generator Integration v1 with exact worktree/version binding, planner-generator-only authorization, bounded plan validation, AST test auditing, and hard rejection of skip/fixme/only/fail constructs: implementation complete on the active capability branch.
+* Playwright Planner/Generator Integration v1 with exact worktree/version binding, planner-generator-only authorization, bounded plan validation, AST test auditing, and hard rejection of skip/fixme/only/fail constructs: merged.
+* fast-check Property Based Testing v1 with deterministic seed/replay policy, explicit validator/policy/state/numeric/custom adapters, no JSON code loading, and no inferred business properties: implementation complete on the active capability branch.
 * Remaining v2.3+ phases remain open.
 
 71. Add Agent Task Contract v1 with explicit repository commit, role, risk, scope, required checks, and bounded authority.

@@ -657,6 +657,8 @@ This separation prevents an agent planner from silently crossing canonical busin
 
 `bun run playwright:agents` inspects or audits Playwright planner/generator artifacts in an exact linked worktree. It never authorizes the healer, rejects coverage-heal workflows, requires explicit plan/seed bindings and assertions, and blocks skip/fixme/only/fail constructs in generated tests. See `docs/playwright-agent-integration.md`.
 
+`bun run test:property` runs the toolkit fast-check integration suite. Property Test Policy v1 fixes seed, run count, skip bound, and optional replay path; property definitions remain reviewed test code rather than JSON-loaded or agent-generated business rules. See `docs/property-based-testing.md`.
+
 ### Incident Analysis Agent v1
 
 `bun run agent:incident` analyzes one explicitly supplied incident package over exact release identity, Runtime Evidence v1, Runtime Health Evidence v1, bounded sanitized errors, and numeric metrics. It produces evidence-cited hypotheses and `INSPECT` / `TEST` / `QUERY` proposals only. It never authorizes restart, rollback, deployment, provider mutation, or source mutation. See `docs/agent-incident-analysis.md`.

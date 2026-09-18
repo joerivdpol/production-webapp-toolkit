@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "seed": 424242,
+  "numRuns": 100,
+  "maxSkipsPerRun": 100,
+  "path": null
+}
