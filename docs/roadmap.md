@@ -243,7 +243,8 @@ This phase adds a generic agent orchestration layer above the deterministic tool
 * Incident Analysis Agent v1 with exact release/runtime binding, sanitized bounded errors and metrics, evidence-cited hypotheses, read-only verification proposals, and no operational recovery authority: merged.
 * OpenTelemetry Evidence v1 with offline bounded OTLP JSON traces/metrics/logs, Runtime Evidence identity binding, explicit signal limits, and privacy-preserving projection that drops raw bodies and arbitrary attributes: merged.
 * Incident Correlation Evidence v1 with deterministic release-window, exact dependency-commit, explicit contract-edge, and prior-failure signature correlations with source references and no causality claim: merged.
-* Agent Resource & Model Quality Telemetry v1 with exact run timing, symbolic worker/model identity, CPU/GPU time, token usage, proposal outcomes, review effort, reopened defects, optional corpus status, and deterministic grouping without an artificial quality score: implementation complete on the active capability branch.
+* Agent Resource & Model Quality Telemetry v1 with exact run timing, symbolic worker/model identity, CPU/GPU time, token usage, proposal outcomes, review effort, reopened defects, optional corpus status, and deterministic grouping without an artificial quality score: merged.
+* Model Routing Evaluation v1 with exact-model evidence qualification, conservative small-first recommendation, explicit measured-quality escalation, freshness handling, and no automatic route-policy mutation: implementation complete on the active capability branch.
 * Remaining v2.3+ phases remain open.
 
 71. Add Agent Task Contract v1 with explicit repository commit, role, risk, scope, required checks, and bounded authority.

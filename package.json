@@ -147,7 +147,8 @@
     "agent:incident": "node scripts/agent-incident-analysis.js",
     "otel:evidence": "node scripts/opentelemetry-evidence.js",
     "incident:correlate": "node scripts/incident-correlation.js",
-    "agent:telemetry": "node scripts/agent-resource-telemetry.js"
+    "agent:telemetry": "node scripts/agent-resource-telemetry.js",
+    "agent:route:evaluate": "node scripts/agent-model-routing-evaluation.js"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.0.0",
