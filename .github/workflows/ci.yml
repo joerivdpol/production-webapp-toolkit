@@ -46,6 +46,9 @@ jobs:
         run: bun run audit:reproducibility --root . --policy config/build-reproducibility-policy.json
       - run: bun run typecheck
       - run: bun run test
+      - name: Testcontainers synthetic Redis smoke
+        timeout-minutes: 2
+        run: bun run integration:testcontainers:smoke
       - run: bun run lint
       - if: github.event_name == 'pull_request'
         env:

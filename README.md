@@ -661,6 +661,8 @@ This separation prevents an agent planner from silently crossing canonical busin
 
 `bun run mutation:stryker` generates a bounded StrykerJS 10.0.0 command-runner config or adapts an existing JSON mutation report into compact mutation evidence. Mutation scope is explicit per source file, mutation score is evaluated against caller policy, source/replacement/test payloads are omitted, and the adapter itself never executes Stryker or package managers. See `docs/stryker-mutation-testing.md`.
 
+`bun run integration:testcontainers` validates or runs bounded Testcontainers 12.1.0 synthetic service scenarios from an exact clean Git commit. Versioned/digest-pinned images, dynamic host ports, SYNTHETIC_ONLY environment values, reverse-order cleanup, and privacy-preserving evidence are enforced; host-network, privileged, bind-mount and fixed-host-port configuration are not part of v1. `bun run integration:testcontainers:smoke` performs the repository's real digest-pinned Redis synthetic roundtrip. See `docs/testcontainers-integration.md`.
+
 ### Incident Analysis Agent v1
 
 `bun run agent:incident` analyzes one explicitly supplied incident package over exact release identity, Runtime Evidence v1, Runtime Health Evidence v1, bounded sanitized errors, and numeric metrics. It produces evidence-cited hypotheses and `INSPECT` / `TEST` / `QUERY` proposals only. It never authorizes restart, rollback, deployment, provider mutation, or source mutation. See `docs/agent-incident-analysis.md`.
