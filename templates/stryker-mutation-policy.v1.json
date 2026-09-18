@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "repository": {
+    "id": "example-repository",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "strykerVersion": "10.0.0",
+  "mutate": [
+    "src/critical-validator.js"
+  ],
+  "testCommand": "node --test test/critical-validator.test.js",
+  "concurrency": 1,
+  "timeoutMs": 10000,
+  "maxMutants": 500,
+  "minimumValidMutants": 1,
+  "minimumMutationScore": 80,
+  "maxSurvived": 0,
+  "maxNoCoverage": 0,
+  "maxInvalidMutants": 10
+}

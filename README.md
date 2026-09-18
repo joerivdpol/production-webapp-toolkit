@@ -659,6 +659,8 @@ This separation prevents an agent planner from silently crossing canonical busin
 
 `bun run test:property` runs the toolkit fast-check integration suite. Property Test Policy v1 fixes seed, run count, skip bound, and optional replay path; property definitions remain reviewed test code rather than JSON-loaded or agent-generated business rules. See `docs/property-based-testing.md`.
 
+`bun run mutation:stryker` generates a bounded StrykerJS 10.0.0 command-runner config or adapts an existing JSON mutation report into compact mutation evidence. Mutation scope is explicit per source file, mutation score is evaluated against caller policy, source/replacement/test payloads are omitted, and the adapter itself never executes Stryker or package managers. See `docs/stryker-mutation-testing.md`.
+
 ### Incident Analysis Agent v1
 
 `bun run agent:incident` analyzes one explicitly supplied incident package over exact release identity, Runtime Evidence v1, Runtime Health Evidence v1, bounded sanitized errors, and numeric metrics. It produces evidence-cited hypotheses and `INSPECT` / `TEST` / `QUERY` proposals only. It never authorizes restart, rollback, deployment, provider mutation, or source mutation. See `docs/agent-incident-analysis.md`.
