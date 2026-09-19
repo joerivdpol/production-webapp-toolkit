@@ -30,7 +30,7 @@ The toolkit is a production-readiness control plane for web repositories. This o
 | **Agent isolation and tool access** | Bounded MCP server, Bubblewrap/prlimit task sandboxes, exact command allowlists, worktree containment, deterministic cleanup and no general remote shell. |
 | **Research, impact and operations views** | Reusable hash-bound Research Bundles, repository impact graph/blast-radius queries and a read-only operator task dashboard over canonical task/lease state. |
 | **Runtime and incident intelligence** | OpenTelemetry evidence adapter, deterministic incident correlation, agent resource/model-quality telemetry and measured model-routing evaluation. |
-| **Advanced verification integrations** | Playwright planner/generator integration, fast-check property-based testing, StrykerJS mutation testing and Testcontainers synthetic integration environments. |
+| **Advanced verification integrations** | Playwright planner/generator integration, fast-check property-based testing, StrykerJS mutation testing, Testcontainers synthetic integration environments and [Pact consumer/provider verification](docs/pact-contract-integration.md). |
 
 The public repository contains the generic engines and contracts only. Private hostnames, credentials, organization policies, model endpoints, signing keys and deployment-specific configuration stay outside the repository. Every runnable command is listed in `package.json`; the detailed sections below explain each capability and its safety semantics.
 
