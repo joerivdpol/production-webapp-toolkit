@@ -44,7 +44,7 @@ For repositories with a large historical lint backlog, [Lint Debt Remediation v1
 
 ## Quick start
 
-The reference toolchain is Node.js 24.21.0 and Bun 1.3.14. CI uses the same pinned versions. The current v2.2 supported Node.js engine range is 24.x.
+The reference toolchain is Node.js 24.21.0 and Bun 1.3.14. CI uses the same pinned versions. The current v2.3 supported Node.js engine range is 24.x.
 
 ```sh
 bun install --frozen-lockfile
@@ -575,7 +575,7 @@ Current release verification:
 
 ```sh
 bun run release:verify
-bun run audit:release . --expected-version 2.2.1
+bun run audit:release . --expected-version 2.3.0
 ```
 
 The historical v1.1 capability surface is retained below for upgrade context.
