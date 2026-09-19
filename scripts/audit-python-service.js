@@ -20,21 +20,44 @@ function readWorkflowText(root) {
     .join("\n");
 }
 
-/** @param {string} root */
-function pythonFiles(root) {
-  return fs
-    .readdirSync(root, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".py"))
-    .map((entry) => entry.name);
+const SOURCE_SCAN_EXCLUDED_DIRECTORIES = new Set([
+  ".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", ".venv",
+  "build", "dist", "node_modules", "tests", "venv",
+]);
+const SOURCE_SCAN_MAX_DEPTH = 4;
+const SOURCE_SCAN_MAX_ENTRIES = 4096;
+
+/** @param {string} root @param {string} extension */
+function sourceFiles(root, extension) {
+  /** @type {Array<{directory:string,depth:number}>} */
+  const pending = [{ directory: root, depth: 0 }];
+  /** @type {string[]} */ const files = [];
+  let visitedEntries = 0;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current) break;
+    let entries;
+    try { entries = fs.readdirSync(current.directory, { withFileTypes: true }); }
+    catch { continue; }
+    for (const entry of entries) {
+      visitedEntries += 1;
+      if (visitedEntries > SOURCE_SCAN_MAX_ENTRIES) return files;
+      const absolute = path.join(current.directory, entry.name);
+      if (entry.isFile() && entry.name.endsWith(extension)) files.push(path.relative(root, absolute));
+      else if (
+        entry.isDirectory() &&
+        current.depth < SOURCE_SCAN_MAX_DEPTH &&
+        !SOURCE_SCAN_EXCLUDED_DIRECTORIES.has(entry.name)
+      ) pending.push({ directory: absolute, depth: current.depth + 1 });
+    }
+  }
+  return files.sort();
 }
 
 /** @param {string} root */
-function shellFiles(root) {
-  return fs
-    .readdirSync(root, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".sh"))
-    .map((entry) => entry.name);
-}
+function pythonFiles(root) { return sourceFiles(root, ".py"); }
+/** @param {string} root */
+function shellFiles(root) { return sourceFiles(root, ".sh"); }
 
 /** @param {string} target */
 export function inspectPythonService(target) {

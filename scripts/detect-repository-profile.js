@@ -9,15 +9,42 @@ import { pathToFileURL } from "node:url";
  * @typedef {"webapp" | "python-service" | "unknown"} RepositoryProfile
  */
 
+const PYTHON_SCAN_EXCLUDED_DIRECTORIES = new Set([
+  ".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", ".venv",
+  "build", "dist", "node_modules", "tests", "venv",
+]);
+const PYTHON_SCAN_MAX_DEPTH = 4;
+const PYTHON_SCAN_MAX_ENTRIES = 4096;
+
 /** @param {string} root */
 function hasPythonSources(root) {
-  return fs
-    .readdirSync(root, { withFileTypes: true })
-    .some(
-      (entry) =>
-        entry.isFile() &&
-        entry.name.endsWith(".py"),
-    );
+  /** @type {Array<{directory:string,depth:number}>} */
+  const pending = [{ directory: root, depth: 0 }];
+  let visitedEntries = 0;
+
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current) break;
+    let entries;
+    try {
+      entries = fs.readdirSync(current.directory, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      visitedEntries += 1;
+      if (visitedEntries > PYTHON_SCAN_MAX_ENTRIES) return false;
+      if (entry.isFile() && entry.name.endsWith(".py")) return true;
+      if (
+        entry.isDirectory() &&
+        current.depth < PYTHON_SCAN_MAX_DEPTH &&
+        !PYTHON_SCAN_EXCLUDED_DIRECTORIES.has(entry.name)
+      ) {
+        pending.push({ directory: path.join(current.directory, entry.name), depth: current.depth + 1 });
+      }
+    }
+  }
+  return false;
 }
 
 /** @param {string} target @returns {RepositoryProfile} */
