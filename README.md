@@ -4,6 +4,36 @@ Production Webapp Toolkit is a small, reusable set of CI gates, repository diagn
 
 The toolkit is generic, read-only where it inspects other repositories, and contains no application or provider configuration. Planned evolution is tracked in [`docs/roadmap.md`](docs/roadmap.md).
 
+## At a glance: what is included
+
+The toolkit is a production-readiness control plane for web repositories. This overview groups the **current capabilities on `main`**; the sections below keep the full step-by-step documentation and trust boundaries.
+
+| Capability | What it includes |
+| --- | --- |
+| **Core CI and repository quality** | Frozen installs, typecheck, full tests, full/changed-files lint, production build, repository scorecards, profiled audits, multi-repository audits, Python-service checks. |
+| **Bootstrap and remediation** | Safe repository bootstrap, deterministic remediation plans, bounded remediation apply, low-risk autofix metadata and guardrails. |
+| **Git and production truth** | Git governance, explicit production-baseline verification, deployment verification, repository status and ecosystem status without guessing canonical branches. |
+| **CI evidence and GitHub policy** | Provider-neutral CI Evidence, GitHub Actions adapters/collectors, CI verification and GitHub branch-protection/governance auditing. |
+| **Environment and public-repository safety** | Environment contracts, client-side environment exposure checks, secret/public-safety scanning and explicit repository-safety gates. |
+| **Database and migration safety** | Migration-risk auditing, database schema snapshots/drift, PostgreSQL schema collectors, PostgreSQL security snapshots and security audits. |
+| **API and cross-repository contracts** | API Contract snapshots, OpenAPI adapters, compatibility auditing, contract inventories and cross-repository contract drift checks. |
+| **Dependency and software-supply-chain security** | Dependency drift, OSV/Dependabot/GitHub advisory evidence, vulnerability policy, CycloneDX SBOM, installed-license evidence, license policy, build reproducibility and artifact provenance. |
+| **Runtime assurance** | Runtime Evidence contracts, checkout/application/container/process collectors, collector adapters, freshness/identity checks, runtime-health evidence and audits, synthetic smoke tests and frontend runtime checks. |
+| **Frontend production quality** | Performance budgets, accessibility gates, SEO production checks, localization completeness and route-inventory/coverage auditing. |
+| **Authorization and backend integrity** | Authorization-policy audits, webhook safety, payment-integrity profiles, booking-integrity evidence/audits and job-scheduler safety. |
+| **Resilience and recovery** | Backup-readiness evidence, disaster-recovery contracts/audits and rollback-readiness contracts/audits. |
+| **Change and test intelligence** | Change-surface evidence, release-risk classification, diff-aware architecture, policy-driven test selection, flaky-test detection, coverage regression, dead-code/orphan detection, repository hygiene, documentation drift and CODEOWNERS ownership. |
+| **Repository policy and ecosystem control** | Versioned repository manifests, policy packs, private organization-policy inheritance, severity policy, repository-check evidence, ecosystem dashboard/history and scheduled reporting plans. |
+| **Release evidence and deployment gating** | Release Evidence Bundle, generic evidence export, release readiness, signed Ed25519 evidence verification and a read-only policy-driven deployment gate returning `ALLOW`, `UNVERIFIED` or `BLOCK`. |
+| **Agent control plane** | Versioned Agent Task/Worker contracts, deterministic routing, SQLite task registry, worker leases, role policies, worker observation/discovery, local-model adapter and fixed evaluation corpus. |
+| **Engineering AI agents** | Diagnosis, reproduction, independent review, low-risk repair, documentation, cross-repository contract-impact, dependency-maintenance and incident-analysis agents with bounded authority. |
+| **Agent isolation and tool access** | Bounded MCP server, Bubblewrap/prlimit task sandboxes, exact command allowlists, worktree containment, deterministic cleanup and no general remote shell. |
+| **Research, impact and operations views** | Reusable hash-bound Research Bundles, repository impact graph/blast-radius queries and a read-only operator task dashboard over canonical task/lease state. |
+| **Runtime and incident intelligence** | OpenTelemetry evidence adapter, deterministic incident correlation, agent resource/model-quality telemetry and measured model-routing evaluation. |
+| **Advanced verification integrations** | Playwright planner/generator integration, fast-check property-based testing, StrykerJS mutation testing and Testcontainers synthetic integration environments. |
+
+The public repository contains the generic engines and contracts only. Private hostnames, credentials, organization policies, model endpoints, signing keys and deployment-specific configuration stay outside the repository. Every runnable command is listed in `package.json`; the detailed sections below explain each capability and its safety semantics.
+
 ## Quality-gate model
 
 The recommended blocking path is frozen dependency installation, typechecking, automated tests, changed-files lint on pull requests, and a production build. Full-repository lint can remain advisory during a measured legacy cleanup.
@@ -12,7 +42,7 @@ The changed-files strategy acts as a ratchet. [`scripts/lint-changed.js`](script
 
 ## Quick start
 
-The reference toolchain is Node.js 24.21.0 and Bun 1.3.14. CI uses the same pinned versions. The current v2.0 supported Node.js engine range is 24.x.
+The reference toolchain is Node.js 24.21.0 and Bun 1.3.14. CI uses the same pinned versions. The current v2.1 supported Node.js engine range is 24.x.
 
 ```sh
 bun install --frozen-lockfile
