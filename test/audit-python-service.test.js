@@ -83,6 +83,41 @@ describe("python service audit", () => {
     assert.equal(report.requiredPassed, report.requiredTotal);
   });
 
+
+
+  it("accepts standard src-layout Python sources and nested shell scripts", () => {
+    const root = createFixture("python-service-src-layout-");
+    fs.mkdirSync(path.join(root, "src", "example_service"), { recursive: true });
+    fs.writeFileSync(path.join(root, "src", "example_service", "__init__.py"), "__all__ = []\n");
+    fs.writeFileSync(path.join(root, "pyproject.toml"), "[project]\nname = \"example-service\"\n");
+    fs.mkdirSync(path.join(root, "scripts"));
+    fs.writeFileSync(path.join(root, "scripts", "ci-local.sh"), "#!/usr/bin/env bash\nset -euo pipefail\n");
+    fs.mkdirSync(path.join(root, "tests"));
+    fs.writeFileSync(path.join(root, "tests", "test_service.py"), "def test_ok():\n    assert True\n");
+    fs.mkdirSync(path.join(root, ".github", "workflows"), { recursive: true });
+    fs.writeFileSync(path.join(root, ".github", "workflows", "ci.yml"), [
+      "jobs:",
+      "  quality:",
+      "    steps:",
+      "      - uses: actions/setup-python@v7",
+      '      - run: echo "python-version: 3.12"',
+      "      - run: python -m py_compile src/example_service/__init__.py",
+      "      - run: python -m pytest",
+      "      - run: bash -n scripts/ci-local.sh",
+    ].join("\n"));
+    const report = inspectPythonService(root);
+    assert.equal(report.corePassed, true);
+  });
+
+  it("requires shell syntax coverage for nested project shell scripts", () => {
+    const root = createPassingService();
+    fs.mkdirSync(path.join(root, "scripts"));
+    fs.writeFileSync(path.join(root, "scripts", "maintenance.sh"), "#!/usr/bin/env bash\n");
+    const report = inspectPythonService(root);
+    assert.equal(report.checks.find((check) => check.id === "shell-syntax-ci")?.passed, false);
+    assert.equal(report.corePassed, false);
+  });
+
   it("keeps normal CLI output human readable", () => {
     const result = runCli(createPassingService());
 

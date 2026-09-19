@@ -39,3 +39,19 @@ test("returns unknown for unsupported repository shapes", () => {
 
   assert.equal(detectRepositoryProfile(root), "unknown");
 });
+
+
+test("detects a standard src-layout Python package", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "profile-python-src-"));
+  fs.writeFileSync(path.join(root, "pyproject.toml"), "[project]\nname = \"src-layout\"\n");
+  fs.mkdirSync(path.join(root, "src", "example_service"), { recursive: true });
+  fs.writeFileSync(path.join(root, "src", "example_service", "__init__.py"), "__all__ = []\n");
+  assert.equal(detectRepositoryProfile(root), "python-service");
+});
+
+test("does not classify test-only Python files as a Python service", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "profile-python-tests-only-"));
+  fs.mkdirSync(path.join(root, "tests"));
+  fs.writeFileSync(path.join(root, "tests", "test_only.py"), "assert True\n");
+  assert.equal(detectRepositoryProfile(root), "unknown");
+});
