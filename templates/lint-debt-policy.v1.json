@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "excludeFiles": [],
+  "excludePrefixes": [],
+  "includeGenerated": false,
+  "maxBatchFiles": 10,
+  "maxBatchBytes": 1048576,
+  "maxFileBytes": 1048576
+}

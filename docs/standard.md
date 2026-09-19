@@ -8,6 +8,8 @@ The core blocking gates are dependency installation from a lockfile, TypeScript 
 
 Changed-files lint creates a ratchet: existing debt remains visible, but touched JavaScript and TypeScript must meet the current standard. The engine compares committed branch changes with a base revision and adds staged, unstaged, and untracked non-ignored files. It uses NUL-delimited Git output and process argument arrays so unusual filenames do not become shell commands.
 
+For an established repository whose full lint is still advisory, Lint Debt Remediation v1 may additionally record the existing lint multiset and block only new debt above that baseline. The baseline is bound to the exact ESLint version and normalized debt policy, so changing exclusions or the linter version requires explicit review and regeneration. Historical cleanup can then run in explicit, bounded batches using only ESLint `layout` fixes; semantic `problem`, `suggestion`, and `directive` fixes remain outside automatic mutation.
+
 The repository audit checks whether these controls exist. It detects structure and command wiring; it does not prove that tests are comprehensive or that a workflow's branch protection is configured. Human review and platform settings remain necessary.
 
 ## Required and optional capabilities

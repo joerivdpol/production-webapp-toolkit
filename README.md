@@ -10,7 +10,7 @@ The toolkit is a production-readiness control plane for web repositories. This o
 
 | Capability | What it includes |
 | --- | --- |
-| **Core CI and repository quality** | Frozen installs, typecheck, full tests, full/changed-files lint, production build, repository scorecards, profiled audits, multi-repository audits, Python-service checks. |
+| **Core CI and repository quality** | Frozen installs, typecheck, full tests, full/changed-files lint, historical lint-debt baselines and bounded layout-only cleanup, production build, repository scorecards, profiled audits, multi-repository audits, Python-service checks. |
 | **Bootstrap and remediation** | Safe repository bootstrap, deterministic remediation plans, bounded remediation apply, low-risk autofix metadata and guardrails. |
 | **Git and production truth** | Git governance, explicit production-baseline verification, deployment verification, repository status and ecosystem status without guessing canonical branches. |
 | **CI evidence and GitHub policy** | Provider-neutral CI Evidence, GitHub Actions adapters/collectors, CI verification and GitHub branch-protection/governance auditing. |
@@ -40,6 +40,8 @@ The recommended blocking path is frozen dependency installation, typechecking, a
 
 The changed-files strategy acts as a ratchet. [`scripts/lint-changed.js`](scripts/lint-changed.js) safely collects added, modified, copied, and renamed JS/JSX/TS/TSX files from the branch comparison, tracked local changes, and untracked non-ignored files. Deleted files are ignored. Git output is NUL-delimited, paths are passed without shell interpolation, and ESLint's exit status remains blocking.
 
+For repositories with a large historical lint backlog, [Lint Debt Remediation v1](docs/lint-debt-remediation.md) adds a second ratchet: record the existing multiset as a baseline, fail only on debt above that baseline, then remove old debt in bounded batches. Automatic apply is restricted to ESLint `layout` fixes, a clean Git worktree, tracked regular files, generated/policy exclusions, byte/file limits, exact post-write hashes, unexpected-diff detection, `git diff --check`, and automatic rollback if the total issue count does not decrease or any new lint-debt fingerprint appears.
+
 ## Quick start
 
 The reference toolchain is Node.js 24.21.0 and Bun 1.3.14. CI uses the same pinned versions. The current v2.2 supported Node.js engine range is 24.x.
@@ -54,6 +56,8 @@ bun run audit:deployment /path/to/repository --expected-ref origin/production/ex
 bun run audit:repository-status /path/to/repository --expected-ref origin/production/example --deployed-commit 0123456789abcdef0123456789abcdef01234567
 bun run audit:all --projects-root "$HOME/projects"
 bun run lint:changed origin/main
+bun run lint:debt:scan -- /path/to/repository
+bun run lint:debt:plan -- /path/to/repository
 ```
 
 The audit is also directly executable:
@@ -607,7 +611,9 @@ Useful commands:
 
 `bun run remediation:plan <repository> --json` now emits versioned Remediation Plan v1 metadata for every missing required repository-quality check. Existing `safe` versus `manual` semantics remain unchanged so the current safe executor stays compatible. Each remediation item additionally declares whether automation is permitted, a `LOW`, `MEDIUM`, or `HIGH` remediation risk, toolkit versus repository ownership, bounded repository-relative file targets, and canonical validation check ids.
 
-The only automatic item remains the toolkit-owned changed-files lint implementation. Missing repository scripts and CI controls remain manual `MEDIUM` risk because their correct implementation depends on the repository toolchain and workflow design. Findings without a deterministic remediation mapping remain manual `HIGH` risk and deliberately carry no invented file targets. Validation commands are not guessed; the plan points to canonical audit checks unless a future controlled capability can prove a deterministic command contract.
+The generic Remediation Plan/Safe Autofix executor still has only one automatic item: the toolkit-owned changed-files lint implementation. Missing repository scripts and CI controls remain manual `MEDIUM` risk because their correct implementation depends on the repository toolchain and workflow design. Findings without a deterministic remediation mapping remain manual `HIGH` risk and deliberately carry no invented file targets. Validation commands are not guessed; the plan points to canonical audit checks unless a future controlled capability can prove a deterministic command contract.
+
+Historical lint cleanup is intentionally a separate explicit engine rather than an expansion of the generic autofix allowlist. `lint-debt.js apply` may edit existing repository source only under its narrower layout-only, clean-worktree, bounded-batch and rollback contract described in [`docs/lint-debt-remediation.md`](docs/lint-debt-remediation.md).
 
 ```sh
 bun run remediation:plan /path/to/repository --json
