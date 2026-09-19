@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "scenarioId": "synthetic-status-contract",
+  "pactVersion": "17.1.4",
+  "consumer": {
+    "id": "synthetic-consumer",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "provider": {
+    "id": "synthetic-provider",
+    "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "dataClassification": "SYNTHETIC_ONLY",
+  "timeoutMs": 15000,
+  "allowedMethods": [
+    "GET"
+  ],
+  "contracts": [
+    {
+      "path": "contracts/synthetic-consumer-synthetic-provider.json",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "interactionCount": 1
+    }
+  ]
+}

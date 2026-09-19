@@ -49,6 +49,9 @@ jobs:
       - name: Testcontainers synthetic Redis smoke
         timeout-minutes: 2
         run: bun run integration:testcontainers:smoke
+      - name: Pact native synthetic contract smoke
+        timeout-minutes: 2
+        run: bun run integration:pact:smoke
       - run: bun run lint
       - if: github.event_name == 'pull_request'
         env:

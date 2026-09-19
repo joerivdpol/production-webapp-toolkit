@@ -153,12 +153,16 @@
     "test:property": "node --test test/property-based-testing.test.js",
     "mutation:stryker": "node scripts/stryker-mutation-integration.js",
     "integration:testcontainers": "node scripts/testcontainers-integration.js",
-    "integration:testcontainers:smoke": "node integration/testcontainers-smoke.mjs"
+    "integration:testcontainers:smoke": "node integration/testcontainers-smoke.mjs",
+    "integration:pact": "node scripts/pact-contract-integration.js",
+    "integration:pact:smoke": "node integration/pact-smoke.mjs"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.0.0",
+    "@pact-foundation/pact": "17.1.4",
     "@playwright/test": "1.61.1",
     "@stryker-mutator/core": "10.0.0",
+    "@types/express": "5.0.6",
     "@types/node": "22.19.17",
     "axe-core": "4.13.0",
     "eslint": "9.39.4",
@@ -169,5 +173,8 @@
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
     "zod": "4.6.5"
+  },
+  "scarfSettings": {
+    "enabled": false
   }
 }

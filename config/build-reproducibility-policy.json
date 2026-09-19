@@ -11,7 +11,7 @@
   },
   "lockfile": {
     "path": "bun.lock",
-    "expectedSha256": "4c56ffe730e471f59915b1946d6dcc437e4243b4c9eddbcb8e4e6e153793b592"
+    "expectedSha256": "bb4352a6a000e06f7a40a4566d1f56dac1c4249141124985f58503c8a9640e16"
   },
   "frozenInstall": {
     "files": [
