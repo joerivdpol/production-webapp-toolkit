@@ -45,7 +45,7 @@ For multi-repository cleanup, `lint:debt:campaign` is a read-only campaign view:
 
 ## Quick start
 
-The reference toolchain is Node.js 24.21.0 and Bun 1.3.14. CI uses the same pinned versions. The current v2.3 supported Node.js engine range is 24.x.
+The reference toolchain is Node.js 24.21.0 and Bun 1.3.14. CI uses the same pinned versions. The current v2.4 supported Node.js engine range is 24.x.
 
 ```sh
 bun install --frozen-lockfile
@@ -60,7 +60,18 @@ bun run lint:changed origin/main
 bun run lint:debt:scan -- /path/to/repository
 bun run lint:debt:plan -- /path/to/repository
 bun run lint:debt:campaign -- /path/to/repo-a /path/to/repo-b
+bun run ci:local -- /path/to/repository --changed-base origin/main
+bun run ci:port -- --port 43174 --cleanup
+bun run ci:classify -- --step e2e --output-file /tmp/ci-e2e.log
 ```
+
+### CI resilience and local parity
+
+`ci:local` runs the standard repository quality gates locally in CI order: typecheck, tests, optional advisory or blocking full lint, changed-files lint when an explicit comparison base is supplied, and production build. Repositories may additionally opt into a `ci:database` package script and `test:e2e`. A blocking failure is labelled as `CODE`, `LINT`, `TEST`, `DATABASE`, `RUNNER/INFRA`, or `POLICY` so a broken runner or stale port is not confused with an application regression.
+
+`ci:port` is intended for persistent self-hosted Linux runners. It inspects only the explicitly reserved TCP port, refuses privileged ports, and only terminates listeners owned by the current user. Cleanup sends `SIGTERM` first; `--force` permits a final `SIGKILL` only when the same-user listener survives. Reserve a different E2E port for every repository.
+
+[`templates/github-actions/self-hosted-bun-webapp-ci-with-e2e.yml`](templates/github-actions/self-hosted-bun-webapp-ci-with-e2e.yml) combines those controls with branch-scoped workflow serialization (`cancel-in-progress: false`), locked dependency installation, explicit stale-port cleanup, failure classification, and Playwright diagnostics. Database-backed applications should serialize any shared local database runtime separately, for example with `flock`, and always stop the local stack in an `EXIT` trap or equivalent `always()` cleanup step.
 
 The audit is also directly executable:
 
