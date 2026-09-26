@@ -66,6 +66,11 @@ export async function analyzeLintDebtRepository(target) {
       nextBatchFiles: plan.summary.selectedFiles,
       nextBatchBytes: plan.summary.selectedBytes,
       plannedResolvedProblems: plan.summary.plannedResolvedProblems,
+      nextBatch: plan.selected.map((item) => ({
+        file: item.file,
+        resolvedProblems: item.resolvedProblems,
+        outputBytes: item.outputBytes,
+      })),
       risk: plan.risk,
       automatic: plan.automatic,
     },
@@ -212,6 +217,16 @@ function formatHuman(report) {
         " baseline=" +
         item.baseline.status,
     );
+    for (const next of item.cleanup.nextBatch) {
+      lines.push(
+        "    " +
+          next.file +
+          " resolve=" +
+          next.resolvedProblems +
+          " bytes=" +
+          next.outputBytes,
+      );
+    }
   }
 
   return lines.join("\n");

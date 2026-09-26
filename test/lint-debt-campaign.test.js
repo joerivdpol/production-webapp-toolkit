@@ -87,6 +87,10 @@ describe("lint debt campaign", () => {
     assert.equal(report.summary.plannedResolvedProblems, 5);
     assert.equal(report.repositories[0].repository, large);
     assert.equal(report.repositories[0].priority, 1);
+    assert.equal(report.repositories[0].cleanup.nextBatch.length, 1);
+    assert.equal(report.repositories[0].cleanup.nextBatch[0].file, "src/app.js");
+    assert.equal(report.repositories[0].cleanup.nextBatch[0].resolvedProblems, 4);
+    assert.equal("output" in report.repositories[0].cleanup.nextBatch[0], false);
     assert.equal(report.repositories[1].repository, small);
     assert.equal(report.repositories[1].priority, 2);
   });

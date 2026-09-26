@@ -37,7 +37,7 @@ The target repository must already have its own local ESLint installation and co
 - current error, warning, fixable and total issue counts;
 - baseline state as `PASS`, `FAIL`, `MISSING`, or `INCOMPATIBLE`;
 - candidate files with safe layout-only fixes;
-- the next bounded batch size and planned resolved-problem count;
+- the next bounded batch size, planned resolved-problem count, and concrete repository-relative file list;
 - a deterministic priority ordered by safe next-batch impact, then total issue count, then repository path.
 
 One repository failing to scan does not hide healthy results from the others; the campaign reports the failure and exits non-zero. Duplicate repository arguments are collapsed. `--json` emits the same campaign as machine-readable evidence.
