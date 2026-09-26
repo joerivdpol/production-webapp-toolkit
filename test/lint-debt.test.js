@@ -13,6 +13,7 @@ import {
   collectTrackedLintFiles,
   compareLintDebt,
   isGeneratedLintPath,
+  normalizeLintMessageForFingerprint,
   planLintDebtRemediation,
   scanLintDebt,
   validateLintDebtPolicy,
@@ -96,6 +97,27 @@ describe("lint debt policy and selection", () => {
   });
 });
 
+describe("lint debt fingerprint normalization", () => {
+  it("ignores volatile line references while preserving other numeric meaning", () => {
+    assert.equal(
+      normalizeLintMessageForFingerprint(
+        "The routes expression could change dependencies of useMemo Hook (at line 213)",
+      ),
+      "The routes expression could change dependencies of useMemo Hook (at line <line>)",
+    );
+    assert.equal(
+      normalizeLintMessageForFingerprint(
+        "The routes expression could change dependencies of useMemo Hook (at line 190)",
+      ),
+      "The routes expression could change dependencies of useMemo Hook (at line <line>)",
+    );
+    assert.equal(
+      normalizeLintMessageForFingerprint("Expected 2 arguments but received 3"),
+      "Expected 2 arguments but received 3",
+    );
+  });
+});
+
 describe("lint debt baseline", () => {
   it("detects only debt above the recorded historical multiset", async () => {
     const root = createLintFixture();
@@ -115,12 +137,20 @@ describe("lint debt baseline", () => {
     const root = createLintFixture();
     const report = await scanLintDebt(root);
     const baseline = buildLintDebtBaseline(report);
+    assert.equal(report.fingerprintVersion, 2);
+    assert.equal(baseline.fingerprintVersion, 2);
     assert.doesNotThrow(() => assertLintDebtBaselineCompatible(report, baseline));
 
     const changedPolicy = { ...baseline, policySha256: "0".repeat(64) };
     assert.throws(
       () => assertLintDebtBaselineCompatible(report, changedPolicy),
       /policy changed/,
+    );
+
+    const changedFingerprint = { ...baseline, fingerprintVersion: 1 };
+    assert.throws(
+      () => assertLintDebtBaselineCompatible(report, changedFingerprint),
+      /fingerprint version differs/,
     );
 
     const changedEngine = {
