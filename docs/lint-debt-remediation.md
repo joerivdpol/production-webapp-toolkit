@@ -64,10 +64,15 @@ Line and column are deliberately not part of the identity. Moving an unchanged f
 The baseline is also bound to:
 
 - exact installed ESLint version;
+- lint fingerprint version;
 - the `layout-only` fix boundary;
 - SHA-256 of the normalized Lint Debt Policy v1.
 
-`check` fails closed when the ESLint version or normalized policy differs. A policy or toolchain change therefore requires explicit review and a newly generated baseline rather than silently changing the debt budget.
+Fingerprint v2 normalizes only volatile `at line N` location fragments in ESLint messages that do not expose a stable `messageId`. Other numeric message content remains unchanged. This prevents pure layout fixes from manufacturing new historical debt merely because the same warning moved to a different source line.
+
+`check` fails closed when the ESLint version, fingerprint version, or normalized policy differs. A policy, fingerprint algorithm, or toolchain change therefore requires explicit review and a newly generated baseline rather than silently changing the debt budget.
+
+Upgrading from a baseline created before fingerprint v2 requires one reviewed baseline regeneration. This is a schema-identity migration, not permission to accept newly introduced lint debt: compare the pre-upgrade and post-upgrade issue totals and rule/file distribution before committing the regenerated baseline.
 
 ## New-debt ratchet
 
