@@ -41,6 +41,7 @@ The recommended blocking path is frozen dependency installation, typechecking, a
 The changed-files strategy acts as a ratchet. [`scripts/lint-changed.js`](scripts/lint-changed.js) safely collects added, modified, copied, and renamed JS/JSX/TS/TSX files from the branch comparison, tracked local changes, and untracked non-ignored files. Deleted files are ignored. Git output is NUL-delimited, paths are passed without shell interpolation, and ESLint's exit status remains blocking.
 
 For repositories with a large historical lint backlog, [Lint Debt Remediation v1](docs/lint-debt-remediation.md) adds a second ratchet: record the existing multiset as a baseline, fail only on debt above that baseline, then remove old debt in bounded batches. Automatic apply is restricted to ESLint `layout` fixes, a clean Git worktree, tracked regular files, generated/policy exclusions, byte/file limits, exact post-write hashes, unexpected-diff detection, `git diff --check`, and automatic rollback if the total issue count does not decrease or any new lint-debt fingerprint appears.
+For multi-repository cleanup, `lint:debt:campaign` is a read-only campaign view: it scans explicit repository paths, reports baseline state, totals historical debt and safe next-batch opportunity, and ranks repositories by deterministic layout-only cleanup potential. It never applies a fix or changes a baseline.
 
 ## Quick start
 
@@ -58,6 +59,7 @@ bun run audit:all --projects-root "$HOME/projects"
 bun run lint:changed origin/main
 bun run lint:debt:scan -- /path/to/repository
 bun run lint:debt:plan -- /path/to/repository
+bun run lint:debt:campaign -- /path/to/repo-a /path/to/repo-b
 ```
 
 The audit is also directly executable:

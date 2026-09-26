@@ -51,6 +51,7 @@
     "lint:debt:check": "node scripts/lint-debt.js check",
     "lint:debt:plan": "node scripts/lint-debt.js plan",
     "lint:debt:apply": "node scripts/lint-debt.js apply",
+    "lint:debt:campaign": "node scripts/lint-debt-campaign.js",
     "test": "node --test",
     "typecheck": "tsc --noEmit",
     "release:verify": "bun run audit:safety . && bun run check && bun run build && bun run audit:release",

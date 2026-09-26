@@ -14,6 +14,7 @@ node scripts/lint-debt.js baseline /path/to/repository
 node scripts/lint-debt.js check /path/to/repository
 node scripts/lint-debt.js plan /path/to/repository
 node scripts/lint-debt.js apply /path/to/repository
+node scripts/lint-debt-campaign.js /path/to/repo-a /path/to/repo-b
 ```
 
 The package aliases are:
@@ -24,9 +25,24 @@ bun run lint:debt:baseline -- /path/to/repository
 bun run lint:debt:check -- /path/to/repository
 bun run lint:debt:plan -- /path/to/repository
 bun run lint:debt:apply -- /path/to/repository
+bun run lint:debt:campaign -- /path/to/repo-a /path/to/repo-b
 ```
 
 The target repository must already have its own local ESLint installation and configuration. The toolkit resolves that repository's ESLint package; it does not substitute the toolkit's lint configuration.
+
+## Multi-repository cleanup campaign
+
+`lint:debt:campaign` accepts one or more explicit repository paths and stays read only. For every repository it runs the canonical debt scan and cleanup plan, inspects the default `.toolkit/lint-debt-baseline.json` when present, and reports:
+
+- current error, warning, fixable and total issue counts;
+- baseline state as `PASS`, `FAIL`, `MISSING`, or `INCOMPATIBLE`;
+- candidate files with safe layout-only fixes;
+- the next bounded batch size, planned resolved-problem count, and concrete repository-relative file list;
+- a deterministic priority ordered by safe next-batch impact, then total issue count, then repository path.
+
+One repository failing to scan does not hide healthy results from the others; the campaign reports the failure and exits non-zero. Duplicate repository arguments are collapsed. `--json` emits the same campaign as machine-readable evidence.
+
+The campaign never creates or regenerates a baseline and never calls `apply`. Its `mutationAuthorized` field is always `false`. Cleanup remains an explicit per-repository operation so each batch can be reviewed and followed by that application's own typecheck, tests, build and relevant E2E checks.
 
 ## Baseline semantics
 

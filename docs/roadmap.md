@@ -123,8 +123,8 @@ Core principles:
 * Policy-driven scheduled job audit for explicit timezone, scheduler registration, locking/overlap posture, timeout, retries, and dead-letter handling: merged.
 * Backup Readiness Evidence v1 plus deterministic backup/restore readiness audit for recency, encryption policy, restore instructions, and restore-test evidence: merged.
 * Disaster Recovery Contract v1 and deterministic readiness audit for source, database, secrets, DNS, deployment, rollback, and restore ownership/runbook coverage: merged.
-* Rollback Readiness Contract v1 and deterministic release rollback audit binding current/previous artifact provenance, exact Change Surface Evidence, prior artifact SHA256 availability, documented rollback command, and canonical migration safety: implementation complete on the active capability branch.
-* v1.3 runtime-assurance capabilities are complete pending merge of the active rollback-readiness capability.
+* Rollback Readiness Contract v1 and deterministic release rollback audit binding current/previous artifact provenance, exact Change Surface Evidence, prior artifact SHA256 availability, documented rollback command, and canonical migration safety: merged.
+* v1.3 runtime-assurance capabilities are complete and merged.
 
 35. Add runtime evidence collectors as separate adapters that emit Runtime Evidence Contract documents.
 36. Support local Git checkout evidence while clearly labeling it as checkout evidence, not process identity.
@@ -176,6 +176,7 @@ Core principles:
 * Remediation Plan v1 expands existing remediation output with automation posture, remediation risk, ownership, repository-relative file targets, and canonical validation requirements while preserving the existing safe/manual executor contract: merged.
 * Safe Autofix v1 hardens automatic remediation to explicit low-risk toolkit-owned allowlisted actions with symlink/path containment, exclusive creation, exact-copy verification, and canonical post-apply validation: merged.
 * Lint Debt Remediation v1 adds exact-version/policy-bound historical lint baselines, new-debt ratcheting, generated/policy exclusions, and explicit bounded ESLint layout-only cleanup with clean-worktree enforcement and rollback: implemented in the current source tree.
+* Lint Debt Campaign v1 adds read-only multi-repository debt inventory, baseline-state reporting, bounded cleanup opportunity totals, deterministic prioritization, and per-repository failure isolation without granting mutation authority: implemented in the current source tree.
 * Agent Safety Policy v1 binds AGENTS.md to explicit canonical sources, exact fenced test commands, and secrets/migration/deployment boundary policy files without interpreting private policy contents: merged.
 * Diff-aware Architecture Policy v1 selects private rule packs from Repository Manifest profile/capabilities and evaluates only commit-bound changed files with forbid-change, forbid-import, and require-import rules: merged.
 * Controlled Agent Workflow v1 composes remediation planning, Agent Safety evidence, and private protected-path policy into proposal-only autofix/propose/human/blocked dispositions with execution explicitly unauthorized: merged.
