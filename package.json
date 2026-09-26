@@ -1,6 +1,6 @@
 {
   "name": "production-webapp-toolkit",
-  "version": "2.3.1",
+  "version": "2.4.0",
   "private": true,
   "description": "Reusable CI quality gates, repository auditing, and AI-agent workflow templates for TypeScript web applications.",
   "type": "module",
@@ -39,6 +39,9 @@
     "audit:performance": "node scripts/audit-performance-budgets.js",
     "runtime:accessibility": "node scripts/run-accessibility-gates.js",
     "ci:evidence": "node scripts/ci-evidence.js",
+    "ci:local": "node scripts/ci-local.js",
+    "ci:classify": "node scripts/ci-failure-classifier.js",
+    "ci:port": "node scripts/ci-port-guard.js",
     "bootstrap": "node scripts/bootstrap-repository.js",
     "remediation:plan": "node scripts/plan-remediation.js",
     "remediation:apply": "node scripts/apply-remediation.js",
