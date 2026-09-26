@@ -31,10 +31,16 @@ const DEFAULT_POLICY = Object.freeze({
 });
 const DEFAULT_POLICY_PATH = ".toolkit/lint-debt-policy.json";
 const DEFAULT_BASELINE_PATH = ".toolkit/lint-debt-baseline.json";
+const LINT_FINGERPRINT_VERSION = 2;
 
 /** @param {string | Buffer} value */
 function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+/** @param {unknown} value */
+export function normalizeLintMessageForFingerprint(value) {
+  return String(value ?? "").replace(/\bat line \d+\b/g, "at line <line>");
 }
 
 /** @param {Buffer} buffer */
@@ -336,7 +342,8 @@ function issueGroupsFromResults(results, root) {
       if (![1, 2].includes(message.severity)) continue;
       const ruleId = message.ruleId ?? "fatal";
       const messageId = message.messageId ?? null;
-      const messageHash = messageId === null ? sha256(String(message.message ?? "")) : null;
+      const messageHash =
+        messageId === null ? sha256(normalizeLintMessageForFingerprint(message.message)) : null;
       const messageIdentity = messageId ?? messageHash;
       const identity = JSON.stringify([relative, ruleId, messageIdentity, message.severity]);
       const signature = sha256(identity);
@@ -420,6 +427,7 @@ export async function scanLintDebt(target, options = {}) {
     version: 1,
     root,
     engine: { name: "eslint", version: state.eslintVersion },
+    fingerprintVersion: LINT_FINGERPRINT_VERSION,
     fixBoundary: "layout-only",
     policy,
     policySha256: sha256(JSON.stringify(policy)),
@@ -434,6 +442,7 @@ function baselineFromState(state) {
   return {
     version: 1,
     engine: { name: "eslint", version: state.eslintVersion },
+    fingerprintVersion: LINT_FINGERPRINT_VERSION,
     fixBoundary: "layout-only",
     selection: state.selection,
     summary: publicSummary(state.summary),
@@ -446,6 +455,7 @@ export function buildLintDebtBaseline(scan) {
   return {
     version: 1,
     engine: scan.engine,
+    fingerprintVersion: scan.fingerprintVersion,
     fixBoundary: scan.fixBoundary,
     policy: scan.policy,
     policySha256: scan.policySha256,
@@ -463,6 +473,11 @@ export function assertLintDebtBaselineCompatible(report, baseline) {
     baseline.engine?.version !== report.engine.version
   ) {
     throw new Error("Lint debt baseline ESLint version differs; review and regenerate the baseline");
+  }
+  if (baseline.fingerprintVersion !== report.fingerprintVersion) {
+    throw new Error(
+      "Lint debt baseline fingerprint version differs; review and regenerate the baseline",
+    );
   }
   if (baseline.fixBoundary !== "layout-only") {
     throw new Error("Lint debt baseline uses an unsupported fix boundary");
