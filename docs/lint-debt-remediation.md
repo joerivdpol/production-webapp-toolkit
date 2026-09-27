@@ -86,6 +86,17 @@ This makes it possible to keep full-repository lint advisory while still adding 
 
 Changed-files lint should normally remain blocking as well. The two controls solve different problems.
 
+## Changed-files-safe cleanup mode
+
+Repositories that keep changed-files lint blocking can add `--changed-files-safe` to `plan` or `apply`. The normal layout-only candidate inventory remains visible, but automatic selection skips any file that would still contain one or more ESLint errors after the layout preview. Warnings do not block selection because standard ESLint exits successfully on warnings unless a repository separately configures a warnings threshold.
+
+```sh
+node scripts/lint-debt.js plan /path/to/repository --changed-files-safe
+node scripts/lint-debt.js apply /path/to/repository --changed-files-safe
+```
+
+This mode does not fix or suppress semantic errors. It avoids touching a legacy file when doing so would make an otherwise blocking changed-files lint gate fail on pre-existing non-layout debt. The JSON plan exposes `remainingErrors` per candidate and `blockedCandidateFiles` in its summary.
+
 ## Automatic cleanup boundary
 
 `plan` previews only ESLint fixes whose rule type is `layout`.

@@ -222,6 +222,38 @@ describe("layout-only automatic lint debt remediation", () => {
     assert.equal(after.issueGroups[0].ruleId, "prefer-const");
   });
 
+  it("can require changed-files-safe cleanup candidates", async () => {
+    const root = createLintFixture();
+
+    const plan = await planLintDebtRemediation(root, { changedFilesSafe: true });
+    assert.equal(plan.changedFilesSafe, true);
+    assert.equal(plan.summary.candidateFiles, 1);
+    assert.equal(plan.summary.blockedCandidateFiles, 1);
+    assert.equal(plan.summary.selectedFiles, 0);
+    assert.equal(plan.candidates[0].remainingErrors, 1);
+
+    const sourceBefore = fs.readFileSync(path.join(root, "src", "app.js"), "utf8");
+    const result = await applyLintDebtRemediation(root, { changedFilesSafe: true });
+    assert.equal(result.changedFilesSafe, true);
+    assert.equal(result.applied, false);
+    assert.equal(result.resolvedProblems, 0);
+    assert.equal(fs.readFileSync(path.join(root, "src", "app.js"), "utf8"), sourceBefore);
+  });
+
+  it("accepts changed-files-safe as an explicit plan CLI mode", () => {
+    const root = createLintFixture();
+    const script = path.join(toolkitRoot, "scripts", "lint-debt.js");
+    const output = execFileSync(
+      process.execPath,
+      [script, "plan", root, "--changed-files-safe", "--json"],
+      { encoding: "utf8" },
+    );
+    const result = JSON.parse(output);
+    assert.equal(result.changedFilesSafe, true);
+    assert.equal(result.summary.blockedCandidateFiles, 1);
+    assert.equal(result.summary.selectedFiles, 0);
+  });
+
   it("rolls back the whole batch when post-write diff validation fails", async () => {
     const root = createLintFixture();
     fs.writeFileSync(
