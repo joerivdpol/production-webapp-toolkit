@@ -558,13 +558,31 @@ function issueCountsByFile(groups) {
   return counts;
 }
 
-/** @param {string} root @param {ReturnType<typeof validateLintDebtPolicy>} policy */
-async function buildLintDebtPlanState(root, policy) {
+/** @param {any[]} results @param {string} root */
+function errorCountsByFile(results, root) {
+  const counts = new Map();
+  for (const result of results) {
+    const relative = path.relative(root, result.filePath).split(path.sep).join("/");
+    const errors = (result.messages ?? []).filter(
+      (/** @type {any} */ message) => message.severity === 2,
+    ).length;
+    if (errors > 0) counts.set(relative, errors);
+  }
+  return counts;
+}
+
+/**
+ * @param {string} root
+ * @param {ReturnType<typeof validateLintDebtPolicy>} policy
+ * @param {{ changedFilesSafe?: boolean }} options
+ */
+async function buildLintDebtPlanState(root, policy, options = {}) {
   const before = await collectLintState(root, policy);
   const preview = await runESLint(root, before.files, true);
   const beforeCounts = issueCountsByFile(before.issueGroups);
   const afterGroups = issueGroupsFromResults(preview.results, root);
   const afterCounts = issueCountsByFile(afterGroups);
+  const afterErrors = errorCountsByFile(preview.results, root);
   const candidates = [];
 
   for (const result of preview.results) {
@@ -581,6 +599,7 @@ async function buildLintDebtPlanState(root, policy) {
       file: relative,
       resolvedProblems,
       outputBytes,
+      remainingErrors: afterErrors.get(relative) ?? 0,
       outputSha256: sha256(result.output),
       output: result.output,
     });
@@ -593,6 +612,7 @@ async function buildLintDebtPlanState(root, policy) {
   let selectedBytes = 0;
   for (const candidate of candidates) {
     if (selected.length >= policy.maxBatchFiles) break;
+    if (options.changedFilesSafe && candidate.remainingErrors > 0) continue;
     if (selectedBytes + candidate.outputBytes > policy.maxBatchBytes) continue;
     selected.push(candidate);
     selectedBytes += candidate.outputBytes;
@@ -605,14 +625,17 @@ async function buildLintDebtPlanState(root, policy) {
     candidates,
     selected,
     selectedBytes,
+    changedFilesSafe: options.changedFilesSafe === true,
   };
 }
 
-/** @param {string} target @param {{ policyPath?: string }} options */
+/** @param {string} target @param {{ policyPath?: string, changedFilesSafe?: boolean }} options */
 export async function planLintDebtRemediation(target, options = {}) {
   const root = assertRepositoryRoot(target);
   const policy = loadLintDebtPolicy(root, options.policyPath);
-  const state = await buildLintDebtPlanState(root, policy);
+  const state = await buildLintDebtPlanState(root, policy, {
+    changedFilesSafe: options.changedFilesSafe === true,
+  });
   const stripOutput = (/** @type {any} */ candidate) => {
     const { output, ...rest } = candidate;
     void output;
@@ -625,12 +648,16 @@ export async function planLintDebtRemediation(target, options = {}) {
     automatic: true,
     risk: "LOW_LAYOUT_ONLY",
     requiresCleanWorktreeForApply: true,
+    changedFilesSafe: state.changedFilesSafe,
     policy,
     before: publicSummary(state.before.summary),
     candidates: state.candidates.map(stripOutput),
     selected: state.selected.map(stripOutput),
     summary: {
       candidateFiles: state.candidates.length,
+      blockedCandidateFiles: state.changedFilesSafe
+        ? state.candidates.filter((candidate) => candidate.remainingErrors > 0).length
+        : 0,
       selectedFiles: state.selected.length,
       selectedBytes: state.selectedBytes,
       plannedResolvedProblems: state.selected.reduce(
@@ -652,17 +679,20 @@ function assertOnlyExpectedDiffs(root, expected) {
   }
 }
 
-/** @param {string} target @param {{ policyPath?: string }} options */
+/** @param {string} target @param {{ policyPath?: string, changedFilesSafe?: boolean }} options */
 export async function applyLintDebtRemediation(target, options = {}) {
   const root = assertRepositoryRoot(target);
   assertCleanRepository(root);
   const policy = loadLintDebtPolicy(root, options.policyPath);
-  const state = await buildLintDebtPlanState(root, policy);
+  const state = await buildLintDebtPlanState(root, policy, {
+    changedFilesSafe: options.changedFilesSafe === true,
+  });
   if (state.selected.length === 0) {
     return {
       version: 1,
       root,
       mode: "layout-only",
+      changedFilesSafe: state.changedFilesSafe,
       applied: false,
       files: [],
       before: publicSummary(state.before.summary),
@@ -716,6 +746,7 @@ export async function applyLintDebtRemediation(target, options = {}) {
       version: 1,
       root,
       mode: "layout-only",
+      changedFilesSafe: state.changedFilesSafe,
       applied: true,
       files: state.selected.map((candidate) => candidate.file),
       before: publicSummary(state.before.summary),
@@ -736,6 +767,7 @@ function parseCli(argv) {
   if (mode === undefined || !modes.has(mode)) return null;
   let target;
   let json = false;
+  let changedFilesSafe = false;
   let policyPath;
   let baselinePath = DEFAULT_BASELINE_PATH;
   let outputPath = DEFAULT_BASELINE_PATH;
@@ -745,6 +777,10 @@ function parseCli(argv) {
     if (argument === undefined) return null;
     if (argument === "--json") {
       json = true;
+      continue;
+    }
+    if (argument === "--changed-files-safe") {
+      changedFilesSafe = true;
       continue;
     }
     if (["--policy", "--baseline", "--output"].includes(argument)) {
@@ -763,6 +799,7 @@ function parseCli(argv) {
     mode,
     target: target ?? process.cwd(),
     json,
+    changedFilesSafe,
     policyPath,
     baselinePath,
     outputPath,
@@ -784,7 +821,11 @@ function formatPlan(plan) {
   return [
     `Lint debt remediation plan: ${plan.root}`,
     "Boundary: ESLint layout fixes only; no problem/suggestion/directive fixes",
+    `Changed-files safe: ${plan.changedFilesSafe ? "yes" : "no"}`,
     `Candidates: ${plan.summary.candidateFiles} files`,
+    ...(plan.changedFilesSafe
+      ? [`Blocked candidates with remaining errors: ${plan.summary.blockedCandidateFiles}`]
+      : []),
     `Selected batch: ${plan.summary.selectedFiles} files / ${plan.summary.selectedBytes} bytes`,
     `Planned resolved problems: ${plan.summary.plannedResolvedProblems}`,
     ...plan.selected.map(
@@ -797,15 +838,26 @@ export async function main(argv = process.argv.slice(2)) {
   const parsed = parseCli(argv);
   if (!parsed) {
     console.error(
-      "Usage: node scripts/lint-debt.js <scan|baseline|check|plan|apply> [repository] [--policy <path>] [--baseline <path>] [--output <path>] [--json]",
+      "Usage: node scripts/lint-debt.js <scan|baseline|check|plan|apply> [repository] [--changed-files-safe] [--policy <path>] [--baseline <path>] [--output <path>] [--json]",
     );
     return 1;
   }
 
   try {
     const root = assertRepositoryRoot(parsed.target);
+    if (
+      parsed.changedFilesSafe &&
+      parsed.mode !== "plan" &&
+      parsed.mode !== "apply"
+    ) {
+      throw new Error("--changed-files-safe is supported only by plan and apply");
+    }
     const policyOptions =
       parsed.policyPath === undefined ? {} : { policyPath: parsed.policyPath };
+    const remediationOptions = {
+      ...policyOptions,
+      changedFilesSafe: parsed.changedFilesSafe,
+    };
 
     if (parsed.mode === "scan") {
       const report = await scanLintDebt(root, policyOptions);
@@ -861,12 +913,12 @@ export async function main(argv = process.argv.slice(2)) {
     }
 
     if (parsed.mode === "plan") {
-      const plan = await planLintDebtRemediation(root, policyOptions);
+      const plan = await planLintDebtRemediation(root, remediationOptions);
       console.log(parsed.json ? JSON.stringify(plan) : formatPlan(plan));
       return 0;
     }
 
-    const result = await applyLintDebtRemediation(root, policyOptions);
+    const result = await applyLintDebtRemediation(root, remediationOptions);
     console.log(
       parsed.json
         ? JSON.stringify(result)
